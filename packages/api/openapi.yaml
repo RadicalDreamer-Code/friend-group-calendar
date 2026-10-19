@@ -1,0 +1,41 @@
+openapi: 3.1.0
+info:
+  title: Friend Group Calendar API
+  version: 0.1.0
+  description: |
+    HTTP API for the friend group calendar. This file is the contract between
+    services/api (Go) and apps/client (TypeScript). After changing it, run
+    `npm run gen:api` in apps/client to regenerate the typed client.
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Liveness and database check
+      responses:
+        "200":
+          description: API and database are reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: API is up but the database is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        database:
+          type: string
+          enum: [ok, unreachable]

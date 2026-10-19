@@ -1,0 +1,69 @@
+# Local development stack. Start everything with `make up` (or `docker compose up --build`).
+# Every value can be overridden in a .env file next to this one (see .env.example).
+name: friend-group-calendar
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-calendar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calendar}
+      POSTGRES_DB: ${POSTGRES_DB:-calendar}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # Catches every email the API sends (sign-in codes from milestone 2 on).
+  # Inbox: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
+  api:
+    build:
+      context: services/api
+      target: dev
+    environment:
+      API_ADDR: ":8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD:-calendar}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable
+      API_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-8082}
+      LOG_FORMAT: text
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./services/api:/src
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: apps/client
+    environment:
+      WEB_PORT: ${WEB_PORT:-8082}
+      EXPO_PUBLIC_API_URL: http://localhost:${API_PORT:-8080}
+    ports:
+      - "${WEB_PORT:-8082}:${WEB_PORT:-8082}"
+    volumes:
+      - ./apps/client:/app
+      - /app/node_modules
+      # Lets `npm run gen:api` inside the container find the OpenAPI spec.
+      - ./packages:/packages:ro
+    depends_on:
+      - api
+
+volumes:
+  db-data:
+  go-mod-cache:
+  go-build-cache:
