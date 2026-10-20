@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"mime"
 	"mime/quotedprintable"
@@ -19,6 +21,9 @@ import (
 	"strings"
 	"time"
 )
+
+// sendTimeout bounds one delivery to the SMTP server, from dialing to QUIT.
+const sendTimeout = 30 * time.Second
 
 type Message struct {
 	To      string
@@ -40,8 +45,9 @@ type SMTP struct {
 }
 
 // NewSMTP prepares a sender. Credentials are optional (Mailpit needs none).
-// net/smtp upgrades to STARTTLS whenever the server offers it and refuses to
-// send PLAIN credentials over an unencrypted connection to a non-local host.
+// Send upgrades to STARTTLS whenever the server offers it, and net/smtp
+// refuses to send PLAIN credentials over an unencrypted connection to a
+// non-local host.
 func NewSMTP(host string, port int, username, password, from string) (*SMTP, error) {
 	fromAddr, err := mail.ParseAddress(from)
 	if err != nil {
@@ -63,19 +69,72 @@ func (s *SMTP) Send(ctx context.Context, msg Message) error {
 	if err != nil {
 		return err
 	}
-	// net/smtp has no context support; run it in a goroutine so a hanging
-	// server cannot hold the request past its deadline.
-	done := make(chan error, 1)
-	go func() { done <- smtp.SendMail(s.addr, s.auth, s.from.Address, []string{msg.To}, body) }()
-	select {
-	case err := <-done:
-		if err != nil {
-			return fmt.Errorf("send mail: %w", err)
+	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+	if err := s.deliver(ctx, msg.To, body); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			err = ctxErr
 		}
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("send mail: %w", ctx.Err())
+		return fmt.Errorf("send mail: %w", err)
 	}
+	return nil
+}
+
+// deliver is smtp.SendMail with a deadline. net/smtp has no context support,
+// so the connection carries the context's deadline and is closed when the
+// context ends; a server that stops answering cannot hold the request or
+// leak the connection.
+func (s *SMTP) deliver(ctx context.Context, to string, body []byte) error {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", s.addr)
+	if err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := conn.SetDeadline(deadline); err != nil {
+			conn.Close()
+			return err
+		}
+	}
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
+
+	c, err := smtp.NewClient(conn, s.host)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	defer c.Close()
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		if err := c.StartTLS(&tls.Config{ServerName: s.host}); err != nil {
+			return err
+		}
+	}
+	if s.auth != nil {
+		if ok, _ := c.Extension("AUTH"); !ok {
+			return errors.New("smtp: server doesn't support AUTH")
+		}
+		if err := c.Auth(s.auth); err != nil {
+			return err
+		}
+	}
+	if err := c.Mail(s.from.Address); err != nil {
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		return err
+	}
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(body); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return c.Quit()
 }
 
 // build renders a multipart/alternative message with a text and an HTML part.

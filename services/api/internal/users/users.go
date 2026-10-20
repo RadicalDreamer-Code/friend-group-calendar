@@ -48,12 +48,11 @@ type Service struct {
 	db      *pgxpool.Pool
 	q       *store.Queries
 	avatars blob.Store
-	// Decoding a large photo takes a lot of memory; cap how many run at once.
-	processing chan struct{}
+	images  *avatar.Processor
 }
 
 func NewService(db *pgxpool.Pool, avatars blob.Store) *Service {
-	return &Service{db: db, q: store.New(db), avatars: avatars, processing: make(chan struct{}, 2)}
+	return &Service{db: db, q: store.New(db), avatars: avatars, images: avatar.NewProcessor()}
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (store.User, error) {
@@ -85,13 +84,7 @@ func (s *Service) SetUsername(ctx context.Context, userID uuid.UUID, raw string)
 
 // SetAvatar processes and stores a new avatar and deletes the previous one.
 func (s *Service) SetAvatar(ctx context.Context, userID uuid.UUID, upload []byte) (store.User, error) {
-	select {
-	case s.processing <- struct{}{}:
-	case <-ctx.Done():
-		return store.User{}, ctx.Err()
-	}
-	img, err := avatar.Process(upload)
-	<-s.processing
+	img, err := s.images.Process(ctx, upload)
 	if err != nil {
 		return store.User{}, err
 	}

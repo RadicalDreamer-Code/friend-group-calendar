@@ -247,3 +247,17 @@ func TestAuthenticateRejectsGarbage(t *testing.T) {
 		}
 	}
 }
+
+func TestRejectedRequestsUseUpNoBudget(t *testing.T) {
+	f := newFixture(t)
+	f.svc.emailCooldown = ratelimit.New(1, 30*time.Second)
+	f.svc.ipCodes = ratelimit.New(2, time.Hour)
+	ctx := context.Background()
+	f.request(t, "ada@example.com", "ip")
+	var rl *RateLimitError
+	if _, err := f.svc.RequestCode(ctx, "ada@example.com", "ip"); !errors.As(err, &rl) {
+		t.Fatalf("resend during the cooldown: err = %v, want RateLimitError", err)
+	}
+	// The rejected resend did not take the client's second code.
+	f.request(t, "bob@example.com", "ip")
+}

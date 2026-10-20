@@ -177,18 +177,15 @@ func (s *Service) RequestCode(ctx context.Context, rawEmail, client string) (cha
 		return uuid.Nil, err
 	}
 	clientEmail := client + "\x00" + email
-	for _, check := range []struct {
-		l   *ratelimit.Limiter
-		key string
-	}{
-		{s.ipCodes, client},
-		{s.emailCooldown, clientEmail},
-		{s.clientEmailHourly, clientEmail},
-		{s.emailHourly, email},
-	} {
-		if ok, wait := check.l.Allow(check.key); !ok {
-			return uuid.Nil, &RateLimitError{RetryAfter: wait}
-		}
+	// A request that any limit rejects counts against none of them, so
+	// tapping resend during the cooldown does not use up the hourly budgets.
+	if ok, wait := ratelimit.AllowAll(
+		ratelimit.Check{Limiter: s.ipCodes, Key: client},
+		ratelimit.Check{Limiter: s.emailCooldown, Key: clientEmail},
+		ratelimit.Check{Limiter: s.clientEmailHourly, Key: clientEmail},
+		ratelimit.Check{Limiter: s.emailHourly, Key: email},
+	); !ok {
+		return uuid.Nil, &RateLimitError{RetryAfter: wait}
 	}
 
 	code, err := generateCode()
