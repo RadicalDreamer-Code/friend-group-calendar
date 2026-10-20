@@ -1,5 +1,6 @@
 # Local development stack. Start everything with `make up` (or `docker compose up --build`).
 # Every value can be overridden in a .env file next to this one (see .env.example).
+# Ports listen on 127.0.0.1 only; set HOST_BIND=0.0.0.0 to reach the API and web app from a phone.
 name: friend-group-calendar
 
 services:
@@ -10,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calendar}
       POSTGRES_DB: ${POSTGRES_DB:-calendar}
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:
@@ -22,9 +23,9 @@ services:
   # Catches every email the API sends (sign-in codes from milestone 2 on).
   # Inbox: http://localhost:8025
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.31.6
     ports:
-      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
 
   api:
     build:
@@ -38,7 +39,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "${HOST_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
     volumes:
       - ./services/api:/src
       - go-mod-cache:/go/pkg/mod
@@ -54,7 +55,7 @@ services:
       WEB_PORT: ${WEB_PORT:-8082}
       EXPO_PUBLIC_API_URL: http://localhost:${API_PORT:-8080}
     ports:
-      - "${WEB_PORT:-8082}:${WEB_PORT:-8082}"
+      - "${HOST_BIND:-127.0.0.1}:${WEB_PORT:-8082}:${WEB_PORT:-8082}"
     volumes:
       - ./apps/client:/app
       - /app/node_modules

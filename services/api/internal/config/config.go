@@ -25,7 +25,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Addr:            env("API_ADDR", ":8080"),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		AllowedOrigins:  splitList(env("API_ALLOWED_ORIGINS", "http://localhost:8081")),
+		AllowedOrigins:  splitList(env("API_ALLOWED_ORIGINS", "http://localhost:8082")),
 		ShutdownTimeout: 10 * time.Second,
 		LogFormat:       env("LOG_FORMAT", "text"),
 	}

@@ -38,8 +38,9 @@ make reset-db    # delete all local data
 
 ### On a phone
 
-Run the Expo dev server on your machine instead of in Docker and open it in Expo Go
-or a development build:
+The stack only listens on `localhost` by default. Set `HOST_BIND=0.0.0.0` in `.env` and
+run `make up` so the phone can reach the API, then run the Expo dev server on your machine
+instead of in Docker and open it in Expo Go or a development build:
 
 ```bash
 cd apps/client

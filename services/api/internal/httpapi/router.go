@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// healthTimeout bounds the database ping so /healthz answers even when the database hangs.
+const healthTimeout = 2 * time.Second
+
 type Server struct {
 	db *pgxpool.Pool
 }
@@ -22,7 +26,9 @@ func NewRouter(db *pgxpool.Pool, allowedOrigins []string) http.Handler {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// Client IP from the TCP peer only; headers like X-Forwarded-For are spoofable.
+	// Behind a reverse proxy, switch to middleware.ClientIPFromXFFTrustedProxies.
+	r.Use(middleware.ClientIPFromRemoteAddr)
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
@@ -41,7 +47,9 @@ func NewRouter(db *pgxpool.Pool, allowedOrigins []string) http.Handler {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	body := map[string]string{"status": "ok", "database": "ok"}
-	if err := s.db.Ping(r.Context()); err != nil {
+	ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
+	defer cancel()
+	if err := s.db.Ping(ctx); err != nil {
 		slog.ErrorContext(r.Context(), "health check: database ping failed", "err", err)
 		status = http.StatusServiceUnavailable
 		body = map[string]string{"status": "degraded", "database": "unreachable"}
@@ -68,6 +76,7 @@ func requestLogger(next http.Handler) http.Handler {
 			"status", ww.Status(),
 			"duration", time.Since(start),
 			"request_id", middleware.GetReqID(r.Context()),
+			"client_ip", middleware.GetClientIP(r.Context()),
 		)
 	})
 }
