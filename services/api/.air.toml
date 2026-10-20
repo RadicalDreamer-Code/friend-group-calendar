@@ -1,0 +1,17 @@
+root = "."
+tmp_dir = "/tmp/air"
+
+[build]
+cmd = "go build -o /tmp/air/api ./cmd/api"
+entrypoint = ["/tmp/air/api"]
+include_ext = ["go", "sql"]
+exclude_dir = ["tmp", "vendor"]
+delay = 300
+kill_delay = "2s"
+send_interrupt = true
+
+[log]
+time = false
+
+[misc]
+clean_on_exit = true

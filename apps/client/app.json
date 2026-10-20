@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Friend Calendar",
+    "slug": "friend-group-calendar",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.friendgroupcalendar.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E4EFF6",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.friendgroupcalendar.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Friend Calendar",
+      "shortName": "Calendar",
+      "themeColor": "#FAF9F7",
+      "backgroundColor": "#FAF9F7"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar"
+    ],
+    "scheme": "friendcal",
+    "backgroundColor": "#FAF9F7",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
