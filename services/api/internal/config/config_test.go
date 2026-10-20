@@ -2,18 +2,58 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
+// setValidEnv sets every required variable so each test can break one.
+func setValidEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("AUTH_SECRET", strings.Repeat("s", minAuthSecretLen))
+	t.Setenv("SMTP_HOST", "localhost")
+	t.Setenv("S3_ENDPOINT", "localhost:9000")
+	t.Setenv("S3_ACCESS_KEY", "key")
+	t.Setenv("S3_SECRET_KEY", "secret")
+}
+
+func TestLoadValid(t *testing.T) {
+	setValidEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.CookieSecure {
+		t.Error("CookieSecure should default to true")
+	}
+}
+
 func TestLoadRequiresDatabaseURL(t *testing.T) {
+	setValidEnv(t)
 	t.Setenv("DATABASE_URL", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected an error without DATABASE_URL")
 	}
 }
 
+func TestLoadRejectsShortAuthSecret(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("AUTH_SECRET", "too-short")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AUTH_SECRET") {
+		t.Fatalf("err = %v, want an AUTH_SECRET error", err)
+	}
+}
+
+func TestLoadRejectsInvalidBool(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("COOKIE_SECURE", "maybe")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "COOKIE_SECURE") {
+		t.Fatalf("err = %v, want a COOKIE_SECURE error", err)
+	}
+}
+
 func TestLoadParsesAllowedOrigins(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	setValidEnv(t)
 	t.Setenv("API_ALLOWED_ORIGINS", " http://localhost:8082, ,https://app.example.com ")
 
 	cfg, err := Load()

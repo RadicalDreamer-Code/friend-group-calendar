@@ -1,9 +1,10 @@
 import { Children, Fragment, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { createStyles } from '@/theme/ThemeProvider';
+import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { hairline, radius, space } from '@/theme/tokens';
 
+import { Icon } from './Icon';
 import { Text } from './Text';
 
 type ListSectionProps = {
@@ -42,19 +43,64 @@ export function ListSection({ title, footer, children }: ListSectionProps) {
 
 type ListRowProps = {
   label?: string;
+  /** Smaller second line under the label. */
+  sublabel?: string;
   /** Right-aligned content: a value string or any element. */
   detail?: ReactNode;
   children?: ReactNode;
+  /** Makes the row a button. */
+  onPress?: () => void;
+  /** Shows a disclosure chevron, for rows that open another screen. */
+  chevron?: boolean;
+  /** Accent (or red) label, for rows that are actions rather than values. */
+  action?: 'default' | 'destructive';
+  disabled?: boolean;
 };
 
-export function ListRow({ label, detail, children }: ListRowProps) {
+export function ListRow({ label, sublabel, detail, children, onPress, chevron, action, disabled }: ListRowProps) {
   const styles = useStyles();
-  return (
-    <View style={styles.row}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-      {typeof detail === 'string' ? <Text tone="secondary">{detail}</Text> : detail}
+  const { colors } = useTheme();
+  const tone = action === 'destructive' ? 'danger' : action === 'default' ? 'accent' : 'primary';
+
+  const content = (
+    <>
+      {label ? (
+        <View style={styles.labels}>
+          <Text tone={tone}>{label}</Text>
+          {sublabel ? (
+            <Text variant="footnote" tone="secondary">
+              {sublabel}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+      {typeof detail === 'string' ? (
+        <Text tone="secondary" numberOfLines={1} style={styles.detail}>
+          {detail}
+        </Text>
+      ) : (
+        detail
+      )}
       {children}
-    </View>
+      {chevron ? <Icon name="chevron-forward" size={18} color={colors.textTertiary} /> : null}
+    </>
+  );
+
+  if (!onPress) return <View style={styles.row}>{content}</View>;
+  return (
+    <Pressable
+      role="button"
+      onPress={onPress}
+      disabled={disabled}
+      aria-disabled={disabled}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        styles.row,
+        (pressed || hovered) && styles.rowPressed,
+        disabled && styles.rowDisabled,
+      ]}
+    >
+      {content}
+    </Pressable>
   );
 }
 
@@ -90,7 +136,17 @@ const useStyles = createStyles((c) => ({
     alignItems: 'center',
     gap: space.md,
   },
-  label: {
+  rowPressed: {
+    backgroundColor: c.fill,
+  },
+  rowDisabled: {
+    opacity: 0.4,
+  },
+  labels: {
     flex: 1,
+    gap: space.xxs,
+  },
+  detail: {
+    flexShrink: 1,
   },
 }));

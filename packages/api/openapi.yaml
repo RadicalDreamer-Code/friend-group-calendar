@@ -1,19 +1,31 @@
 openapi: 3.1.0
 info:
   title: Friend Group Calendar API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP API for the friend group calendar. This file is the contract between
     services/api (Go) and apps/client (TypeScript). After changing it, run
     `npm run gen:api` in apps/client to regenerate the typed client.
+
+    Authentication: web clients get an HttpOnly `session` cookie from
+    POST /auth/verify; native apps get a token in the response body and send
+    it as `Authorization: Bearer <token>`. Sessions last 90 days and are
+    renewed while in use.
+
+    Every error response has the body `{"error": {"code", "message"}}`.
+    `code` is stable and meant for the client to switch on.
 servers:
   - url: http://localhost:8080
     description: Local Docker Compose
+security:
+  - sessionCookie: []
+  - bearer: []
 paths:
   /healthz:
     get:
       operationId: getHealth
       summary: Liveness and database check
+      security: []
       responses:
         "200":
           description: API and database are reachable
@@ -27,7 +39,314 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Health"
+
+  /auth/request-code:
+    post:
+      operationId: requestCode
+      summary: Email a 6-digit sign-in code
+      description: |
+        Replaces any earlier code for the address. Codes expire after 10
+        minutes and allow 5 attempts. The response is the same whether or not
+        an account exists; the account is created on the first verify.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "204":
+          description: Code sent
+        "400":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /auth/verify:
+    post:
+      operationId: verifyCode
+      summary: Exchange a code for a session
+      description: |
+        Error codes: `invalid_code` (wrong code, try again), `code_expired`
+        (request a new code), `invalid_email`, `invalid_platform`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, platform]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                platform:
+                  $ref: "#/components/schemas/Platform"
+                deviceName:
+                  type: string
+                  maxLength: 64
+                  description: Shown in the device list. Derived from the user agent when omitted.
+      responses:
+        "200":
+          description: Signed in. Web clients also receive the session cookie.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  token:
+                    type: string
+                    description: Only for native platforms; keep it in secure storage.
+        "400":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: End the current session
+      description: Also succeeds without a session and always clears the cookie.
+      responses:
+        "204":
+          description: Signed out
+
+  /me:
+    get:
+      operationId: getMe
+      summary: The signed-in user
+      responses:
+        "200":
+          description: The user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateMe
+      summary: Update the profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  $ref: "#/components/schemas/Username"
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          description: "`username_taken`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /username-availability:
+    get:
+      operationId: getUsernameAvailability
+      summary: Check whether a username is free
+      description: The caller's own current username counts as available.
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Availability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available]
+                properties:
+                  available:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /me/avatar:
+    put:
+      operationId: putAvatar
+      summary: Upload a new avatar
+      description: |
+        JPEG, PNG, WebP or GIF up to 10 MB. The API center-crops it to a
+        square, resizes it to 512 px and stores it as WebP.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteAvatar
+      summary: Remove the avatar
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /me/sessions:
+    get:
+      operationId: listSessions
+      summary: Devices that are signed in
+      responses:
+        "200":
+          description: Active sessions, most recently used first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /me/sessions/{sessionId}:
+    delete:
+      operationId: revokeSession
+      summary: Sign one device out
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Signed out
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /me/sessions/revoke-others:
+    post:
+      operationId: revokeOtherSessions
+      summary: Sign out every other device
+      responses:
+        "204":
+          description: Signed out
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /avatars/{userId}/{file}:
+    get:
+      operationId: getAvatar
+      summary: An avatar image
+      description: Public and cached for a year; the URL changes with every upload.
+      security: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The image
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/Error"
+
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+    bearer:
+      type: http
+      scheme: bearer
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: "`rate_limited`; see the Retry-After header"
+      headers:
+        Retry-After:
+          description: Seconds to wait
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
   schemas:
     Health:
       type: object
@@ -39,3 +358,68 @@ components:
         database:
           type: string
           enum: [ok, unreachable]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    Platform:
+      type: string
+      enum: [web, ios, android]
+
+    Username:
+      type: string
+      pattern: "^[a-z0-9_.]{3,20}$"
+      description: Unique, 3–20 characters of a–z, 0–9, _ and . (input is lowercased).
+
+    User:
+      type: object
+      required: [id, email, username, avatarUrl, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        username:
+          description: Null until picked after the first sign-in.
+          oneOf:
+            - $ref: "#/components/schemas/Username"
+            - type: "null"
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+
+    Session:
+      type: object
+      required: [id, deviceName, platform, createdAt, lastUsedAt, current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceName:
+          type: string
+        platform:
+          $ref: "#/components/schemas/Platform"
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: The session this request was made with.
