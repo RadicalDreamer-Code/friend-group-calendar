@@ -20,12 +20,26 @@ services:
       timeout: 3s
       retries: 20
 
-  # Catches every email the API sends (sign-in codes from milestone 2 on).
+  # Catches every email the API sends, like sign-in codes.
   # Inbox: http://localhost:8025
   mailpit:
     image: axllent/mailpit:v1.31.6
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+  # S3-compatible object storage for avatars (R2 or S3 in production).
+  # The API creates the bucket on startup.
+  # Console: http://localhost:9001/rustfs/console/ (login: S3_ACCESS_KEY / S3_SECRET_KEY)
+  s3:
+    image: rustfs/rustfs:1.0.3
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-calendar}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-calendar-dev-secret}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - s3-data:/data
 
   api:
     build:
@@ -33,11 +47,24 @@ services:
       target: dev
     environment:
       API_ADDR: ":8080"
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:8080}
       DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD:-calendar}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable
-      API_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-8082}
+      # Tests create and drop their own databases on this server.
+      TEST_DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD:-calendar}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable
+      API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:8082}
       LOG_FORMAT: text
+      # Development only. Production needs its own: `openssl rand -hex 32`.
+      AUTH_SECRET: ${AUTH_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
+      MAIL_FROM: Friend Calendar <hello@friend-calendar.localhost>
+      S3_ENDPOINT: s3:9000
+      S3_USE_SSL: "false"
+      S3_BUCKET: avatars
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-calendar}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-calendar-dev-secret}
+      S3_CREATE_BUCKET: "true"
     ports:
       - "${HOST_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
     volumes:
@@ -47,6 +74,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+      s3:
+        condition: service_started
 
   web:
     build:
@@ -66,5 +97,6 @@ services:
 
 volumes:
   db-data:
+  s3-data:
   go-mod-cache:
   go-build-cache:

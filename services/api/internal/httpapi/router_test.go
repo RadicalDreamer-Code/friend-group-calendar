@@ -54,7 +54,11 @@ func TestHealthTimesOutOnUnresponsiveDatabase(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	start := time.Now()
-	NewRouter(pool, nil).ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
+	h, err := NewRouter(Options{DB: pool})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
@@ -67,7 +71,11 @@ func TestHealthTimesOutOnUnresponsiveDatabase(t *testing.T) {
 // Forwarding headers come from the client and must not change its recorded IP.
 func TestClientIPIgnoresForwardedHeaders(t *testing.T) {
 	var got string
-	r := NewRouter(nil, nil).(chi.Router)
+	h, err := NewRouter(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := h.(chi.Router)
 	r.Get("/ip", func(w http.ResponseWriter, r *http.Request) {
 		got = middleware.GetClientIP(r.Context())
 	})
@@ -81,5 +89,28 @@ func TestClientIPIgnoresForwardedHeaders(t *testing.T) {
 
 	if got != "203.0.113.9" {
 		t.Fatalf("client IP = %q, want 203.0.113.9", got)
+	}
+}
+
+func TestRateLimitKeyGroupsIPv6By64(t *testing.T) {
+	cases := map[string]string{
+		"203.0.113.7:51000":               "203.0.113.7",
+		"[::ffff:203.0.113.7]:51000":      "203.0.113.7",
+		"[2001:db8:1:2:aaaa::1]:51000":    "2001:db8:1:2::/64",
+		"[2001:db8:1:2:bbbb:cccc::9]:443": "2001:db8:1:2::/64",
+		"[2001:db8:1:3::1]:51000":         "2001:db8:1:3::/64",
+		"not-an-address":                  "",
+	}
+	for remote, want := range cases {
+		var got string
+		h := middleware.ClientIPFromRemoteAddr(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = rateLimitKey(r)
+		}))
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = remote
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		if got != want {
+			t.Errorf("rateLimitKey(%q) = %q, want %q", remote, got, want)
+		}
 	}
 }

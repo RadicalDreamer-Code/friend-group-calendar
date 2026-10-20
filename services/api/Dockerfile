@@ -10,7 +10,9 @@ CMD ["air", "-c", ".air.toml"]
 
 FROM base AS build
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
+# nodynamic: use the built-in WASM WebP encoder, never a system libwebp, so
+# the binary stays static and runs in the distroless image.
+RUN CGO_ENABLED=0 go build -tags nodynamic -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
 # Production: a small image with only the binary.
 FROM gcr.io/distroless/static-debian12:nonroot AS prod

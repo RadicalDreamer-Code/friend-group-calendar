@@ -3,7 +3,7 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,17 +12,58 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/blob"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
 
 // healthTimeout bounds the database ping so /healthz answers even when the database hangs.
 const healthTimeout = 2 * time.Second
 
-type Server struct {
-	db *pgxpool.Pool
+type Options struct {
+	DB             *pgxpool.Pool
+	AllowedOrigins []string
+	Auth           *auth.Service
+	Users          *users.Service
+	Avatars        blob.Store
+	// PublicURL is the API's own address as clients see it, for avatar URLs.
+	PublicURL    string
+	CookieSecure bool
 }
 
-func NewRouter(db *pgxpool.Pool, allowedOrigins []string) http.Handler {
-	s := &Server{db: db}
+type Server struct {
+	db           *pgxpool.Pool
+	auth         *auth.Service
+	users        *users.Service
+	avatars      blob.Store
+	publicURL    string
+	cookieSecure bool
+}
+
+func NewRouter(o Options) (http.Handler, error) {
+	s := &Server{
+		db:           o.DB,
+		auth:         o.Auth,
+		users:        o.Users,
+		avatars:      o.Avatars,
+		publicURL:    o.PublicURL,
+		cookieSecure: o.CookieSecure,
+	}
+
+	// Rejects cross-origin browser requests that change data (POST, PATCH,
+	// DELETE, ...) unless they come from the web app. It reads Sec-Fetch-Site
+	// and Origin, which browsers always send and native apps do not, so
+	// requests from the iOS and Android app pass.
+	csrf := http.NewCrossOriginProtection()
+	for _, origin := range o.AllowedOrigins {
+		if err := csrf.AddTrustedOrigin(origin); err != nil {
+			return nil, fmt.Errorf("allowed origin %q: %w", origin, err)
+		}
+	}
+	csrf.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusForbidden, "forbidden_origin", "Requests from this origin are not allowed.")
+	}))
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -32,16 +73,38 @@ func NewRouter(db *pgxpool.Pool, allowedOrigins []string) http.Handler {
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   allowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowedOrigins:   o.AllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
 		MaxAge:           600,
 	}))
+	r.Use(csrf.Handler)
 
 	r.Get("/healthz", s.handleHealth)
+	r.Get("/avatars/{userID}/{file}", s.handleGetAvatar)
 
-	return r
+	r.Group(func(r chi.Router) {
+		r.Use(s.loadSession)
+
+		r.Post("/auth/request-code", s.handleRequestCode)
+		r.Post("/auth/verify", s.handleVerify)
+		r.Post("/auth/logout", s.handleLogout)
+
+		r.Group(func(r chi.Router) {
+			r.Use(requireAuth)
+			r.Get("/me", s.handleGetMe)
+			r.Patch("/me", s.handleUpdateMe)
+			r.Put("/me/avatar", s.handlePutAvatar)
+			r.Delete("/me/avatar", s.handleDeleteAvatar)
+			r.Get("/me/sessions", s.handleListSessions)
+			r.Post("/me/sessions/revoke-others", s.handleRevokeOtherSessions)
+			r.Delete("/me/sessions/{sessionID}", s.handleRevokeSession)
+			r.Get("/username-availability", s.handleUsernameAvailability)
+		})
+	})
+
+	return r, nil
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -55,14 +118,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		body = map[string]string{"status": "degraded", "database": "unreachable"}
 	}
 	writeJSON(w, status, body)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Error("write json response", "err", err)
-	}
 }
 
 func requestLogger(next http.Handler) http.Handler {

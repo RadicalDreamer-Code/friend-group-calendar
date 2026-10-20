@@ -2,7 +2,7 @@ root = "."
 tmp_dir = "/tmp/air"
 
 [build]
-cmd = "go build -o /tmp/air/api ./cmd/api"
+cmd = "go build -tags nodynamic -o /tmp/air/api ./cmd/api"
 entrypoint = ["/tmp/air/api"]
 include_ext = ["go", "sql"]
 exclude_dir = ["tmp", "vendor"]

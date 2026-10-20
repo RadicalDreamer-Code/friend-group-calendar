@@ -10,10 +10,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/blob"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/config"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/database"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/httpapi"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/mail"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
+
+// cleanupInterval is how often expired sign-in codes and sessions are deleted.
+const cleanupInterval = time.Hour
 
 func main() {
 	if err := run(); err != nil {
@@ -42,9 +49,33 @@ func run() error {
 		return err
 	}
 
+	sender, err := mail.NewSMTP(cfg.Mail.Host, cfg.Mail.Port, cfg.Mail.Username, cfg.Mail.Password, cfg.Mail.From)
+	if err != nil {
+		return err
+	}
+	avatars, err := blob.NewS3(ctx, cfg.S3)
+	if err != nil {
+		return err
+	}
+	authService := auth.NewService(pool, sender, cfg.AuthSecret, auth.DefaultLimits)
+	go runCleanup(ctx, authService)
+
+	handler, err := httpapi.NewRouter(httpapi.Options{
+		DB:             pool,
+		AllowedOrigins: cfg.AllowedOrigins,
+		Auth:           authService,
+		Users:          users.NewService(pool, avatars),
+		Avatars:        avatars,
+		PublicURL:      cfg.PublicURL,
+		CookieSecure:   cfg.CookieSecure,
+	})
+	if err != nil {
+		return err
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewRouter(pool, cfg.AllowedOrigins),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -70,6 +101,21 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+func runCleanup(ctx context.Context, a *auth.Service) {
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
+	for {
+		if err := a.Cleanup(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("cleanup", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func setupLogger(format string) {
