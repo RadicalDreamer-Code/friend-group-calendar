@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
 )
 
 type personJSON struct {
@@ -153,4 +155,20 @@ func TestFriendsErrors(t *testing.T) {
 	signedOut := api.newClient(t)
 	resp, body = signedOut.do("GET", "/friends", nil)
 	expectError(t, resp, body, http.StatusUnauthorized, "unauthenticated")
+}
+
+func TestSearchRateLimited(t *testing.T) {
+	api := newTestAPI(t)
+	ada, _ := api.signUp(t, "ada@example.com", "ada")
+
+	for range friends.DefaultLimits.Search.N {
+		if resp, body := ada.do("GET", "/users/search?q=bo", nil); resp.StatusCode != http.StatusOK {
+			t.Fatalf("search: %d %s", resp.StatusCode, body)
+		}
+	}
+	resp, body := ada.do("GET", "/users/search?q=bo", nil)
+	expectError(t, resp, body, http.StatusTooManyRequests, "rate_limited")
+	if resp.Header.Get("Retry-After") == "" {
+		t.Fatal("429 without Retry-After")
+	}
 }

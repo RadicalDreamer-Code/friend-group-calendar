@@ -88,23 +88,29 @@ type Limit struct {
 }
 
 // Limits bound how many friend requests one user can send, so a declined
-// request cannot be repeated over and over.
+// request cannot be repeated over and over, and how often they can search,
+// so the user list cannot be scraped by walking every prefix.
 type Limits struct {
 	// PerSender caps the requests one user sends to anyone.
 	PerSender Limit
 	// PerPair caps the requests one user sends to the same person.
 	PerPair Limit
+	// Search caps the username searches one user makes.
+	Search Limit
 }
 
 var DefaultLimits = Limits{
 	PerSender: Limit{N: 30, Window: time.Hour},
 	PerPair:   Limit{N: 3, Window: 24 * time.Hour},
+	// Typing a name searches a few times; listing everyone takes thousands.
+	Search: Limit{N: 120, Window: time.Hour},
 }
 
 type Service struct {
 	q         *store.Queries
 	perSender *ratelimit.Limiter
 	perPair   *ratelimit.Limiter
+	search    *ratelimit.Limiter
 }
 
 func NewService(db *pgxpool.Pool, limits Limits) *Service {
@@ -112,6 +118,7 @@ func NewService(db *pgxpool.Pool, limits Limits) *Service {
 		q:         store.New(db),
 		perSender: ratelimit.New(limits.PerSender.N, limits.PerSender.Window),
 		perPair:   ratelimit.New(limits.PerPair.N, limits.PerPair.Window),
+		search:    ratelimit.New(limits.Search.N, limits.Search.Window),
 	}
 }
 
@@ -129,6 +136,9 @@ func (s *Service) Search(ctx context.Context, viewerID uuid.UUID, raw string) ([
 	q, err := NormalizeQuery(raw)
 	if err != nil {
 		return nil, err
+	}
+	if ok, wait := s.search.Allow(viewerID.String()); !ok {
+		return nil, &ratelimit.Error{RetryAfter: wait}
 	}
 	rows, err := s.q.SearchUsers(ctx, store.SearchUsersParams{
 		ViewerID: viewerID,

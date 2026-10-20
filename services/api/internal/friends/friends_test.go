@@ -310,10 +310,40 @@ func TestSendErrors(t *testing.T) {
 	}
 }
 
+func TestSearchRateLimit(t *testing.T) {
+	limits := DefaultLimits
+	limits.Search = Limit{N: 2, Window: time.Hour}
+	f := newFixture(t, limits)
+	ctx := context.Background()
+	ada := f.user(t, "ada")
+	bob := f.user(t, "bob")
+
+	// Invalid queries never reach the database and use up nothing.
+	if _, err := f.svc.Search(ctx, ada.ID, "a"); !errors.Is(err, ErrInvalidQuery) {
+		t.Fatalf("one-letter search: err = %v", err)
+	}
+	for range 2 {
+		if _, err := f.svc.Search(ctx, ada.ID, "bo"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := f.svc.Search(ctx, ada.ID, "bo")
+	var rl *ratelimit.Error
+	if !errors.As(err, &rl) || rl.RetryAfter <= 0 {
+		t.Fatalf("third search: err = %v, want a rate limit", err)
+	}
+
+	// The limit is per user.
+	if _, err := f.svc.Search(ctx, bob.ID, "ad"); err != nil {
+		t.Fatalf("another user's search: %v", err)
+	}
+}
+
 func TestSendRateLimits(t *testing.T) {
 	f := newFixture(t, Limits{
 		PerSender: Limit{N: 3, Window: time.Hour},
 		PerPair:   Limit{N: 2, Window: time.Hour},
+		Search:    DefaultLimits.Search,
 	})
 	ctx := context.Background()
 	ada := f.user(t, "ada")

@@ -211,7 +211,8 @@ export interface paths {
          *     20 results, exact match first, then shorter usernames. Never includes
          *     the caller or people who have not picked a username yet.
          *     Error codes: `invalid_query` (not 2–20 username characters),
-         *     `username_required` (the caller has no username yet).
+         *     `username_required` (the caller has no username yet), `rate_limited`
+         *     (more than 120 searches in an hour).
          */
         get: operations["searchUsers"];
         put?: never;
@@ -793,6 +794,7 @@ export interface operations {
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listFriends: {

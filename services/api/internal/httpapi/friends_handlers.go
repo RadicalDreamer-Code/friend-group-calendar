@@ -50,6 +50,8 @@ func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, friends.ErrInvalidQuery):
 		writeError(w, http.StatusBadRequest, "invalid_query", "Search for 2–20 characters of a username.")
 		return
+	case writeRateLimited(w, err):
+		return
 	case err != nil:
 		writeInternalError(w, r, err)
 		return
