@@ -198,6 +198,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find people by username
+         * @description Prefix search: "ad" finds ada and adam. A leading @ is ignored. At most
+         *     20 results, exact match first, then shorter usernames. Never includes
+         *     the caller or people who have not picked a username yet.
+         *     Error codes: `invalid_query` (not 2–20 username characters),
+         *     `username_required` (the caller has no username yet).
+         */
+        get: operations["searchUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/friends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Friends and pending friend requests */
+        get: operations["listFriends"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/friends/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * End a friendship
+         * @description Error codes: `not_friends`, `user_not_found` (malformed ID).
+         */
+        delete: operations["removeFriend"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/friend-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask someone to be friends
+         * @description If they already asked the caller, this accepts their request and the
+         *     result is `friends`. Sending again while a request is pending, or to a
+         *     friend, changes nothing. Error codes: `user_not_found`,
+         *     `cannot_add_self`, `rate_limited` (30 requests an hour, 3 a day to the
+         *     same person).
+         */
+        post: operations["sendFriendRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/friend-requests/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Decline a request from this user, or cancel one sent to them
+         * @description Error codes: `request_not_found`, `user_not_found` (malformed ID).
+         */
+        delete: operations["deleteFriendRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/friend-requests/{userId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept the request this user sent
+         * @description Error codes: `request_not_found`, `user_not_found` (malformed ID).
+         */
+        post: operations["acceptFriendRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/avatars/{userId}/{file}": {
         parameters: {
             query?: never;
@@ -262,6 +387,30 @@ export interface components {
             /** @description The session this request was made with. */
             current: boolean;
         };
+        /** @description Another user as the caller sees them; never includes the email. */
+        Person: {
+            /** Format: uuid */
+            id: string;
+            username: components["schemas"]["Username"];
+            /** Format: uri */
+            avatarUrl: string | null;
+        };
+        /**
+         * @description none; friends; outgoing (the caller asked, waiting for them);
+         *     incoming (they asked the caller).
+         * @enum {string}
+         */
+        FriendshipStatus: "none" | "friends" | "outgoing" | "incoming";
+        Friend: {
+            user: components["schemas"]["Person"];
+            /** Format: date-time */
+            since: string;
+        };
+        FriendRequest: {
+            user: components["schemas"]["Person"];
+            /** Format: date-time */
+            createdAt: string;
+        };
     };
     responses: {
         /** @description Error */
@@ -285,7 +434,10 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        /** @description The other user. */
+        UserId: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -611,6 +763,171 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Error"];
+        };
+    };
+    searchUsers: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching people with the caller's friendship to each */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            user: components["schemas"]["Person"];
+                            friendship: components["schemas"]["FriendshipStatus"];
+                        }[];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listFriends: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Friends by username; requests newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        friends: components["schemas"]["Friend"][];
+                        /** @description Requests to the caller, waiting for them to accept or decline. */
+                        incoming: components["schemas"]["FriendRequest"][];
+                        /** @description Requests the caller sent that are still pending. */
+                        outgoing: components["schemas"]["FriendRequest"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    removeFriend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The other user. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No longer friends */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    sendFriendRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The friendship afterwards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        friendship: "outgoing" | "friends";
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    deleteFriendRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The other user. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    acceptFriendRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The other user. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Now friends */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     getAvatar: {

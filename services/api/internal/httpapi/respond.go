@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/ratelimit"
 )
 
 // maxJSONBody bounds JSON request bodies; none of them need more.
@@ -51,7 +51,7 @@ func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
 
 // writeRateLimited answers 429 with Retry-After when err is a rate limit.
 func writeRateLimited(w http.ResponseWriter, err error) bool {
-	var rl *auth.RateLimitError
+	var rl *ratelimit.Error
 	if !errors.As(err, &rl) {
 		return false
 	}

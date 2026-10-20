@@ -31,12 +31,16 @@ type userResponse struct {
 }
 
 func (s *Server) userResponse(u store.User) userResponse {
-	resp := userResponse{ID: u.ID, Email: u.Email, Username: u.Username, CreatedAt: u.CreatedAt}
-	if u.AvatarKey != nil {
-		url := s.publicURL + "/avatars/" + *u.AvatarKey
-		resp.AvatarURL = &url
+	return userResponse{ID: u.ID, Email: u.Email, Username: u.Username, AvatarURL: s.avatarURL(u.AvatarKey), CreatedAt: u.CreatedAt}
+}
+
+// avatarURL is where the API serves a stored avatar, or nil without one.
+func (s *Server) avatarURL(key *string) *string {
+	if key == nil {
+		return nil
 	}
-	return resp
+	url := s.publicURL + "/avatars/" + *key
+	return &url
 }
 
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {

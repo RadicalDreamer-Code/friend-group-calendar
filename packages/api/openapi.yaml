@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Friend Group Calendar API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     HTTP API for the friend group calendar. This file is the contract between
     services/api (Go) and apps/client (TypeScript). After changing it, run
@@ -305,6 +305,176 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
 
+  /users/search:
+    get:
+      operationId: searchUsers
+      summary: Find people by username
+      description: |
+        Prefix search: "ad" finds ada and adam. A leading @ is ignored. At most
+        20 results, exact match first, then shorter usernames. Never includes
+        the caller or people who have not picked a username yet.
+        Error codes: `invalid_query` (not 2–20 username characters),
+        `username_required` (the caller has no username yet).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        "200":
+          description: Matching people with the caller's friendship to each
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [user, friendship]
+                      properties:
+                        user:
+                          $ref: "#/components/schemas/Person"
+                        friendship:
+                          $ref: "#/components/schemas/FriendshipStatus"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+
+  /friends:
+    get:
+      operationId: listFriends
+      summary: Friends and pending friend requests
+      responses:
+        "200":
+          description: Friends by username; requests newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [friends, incoming, outgoing]
+                properties:
+                  friends:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Friend"
+                  incoming:
+                    description: Requests to the caller, waiting for them to accept or decline.
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FriendRequest"
+                  outgoing:
+                    description: Requests the caller sent that are still pending.
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FriendRequest"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+
+  /friends/{userId}:
+    delete:
+      operationId: removeFriend
+      summary: End a friendship
+      description: "Error codes: `not_friends`, `user_not_found` (malformed ID)."
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: No longer friends
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /friend-requests:
+    post:
+      operationId: sendFriendRequest
+      summary: Ask someone to be friends
+      description: |
+        If they already asked the caller, this accepts their request and the
+        result is `friends`. Sending again while a request is pending, or to a
+        friend, changes nothing. Error codes: `user_not_found`,
+        `cannot_add_self`, `rate_limited` (30 requests an hour, 3 a day to the
+        same person).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: The friendship afterwards
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [friendship]
+                properties:
+                  friendship:
+                    type: string
+                    enum: [outgoing, friends]
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /friend-requests/{userId}:
+    delete:
+      operationId: deleteFriendRequest
+      summary: Decline a request from this user, or cancel one sent to them
+      description: "Error codes: `request_not_found`, `user_not_found` (malformed ID)."
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Request deleted
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /friend-requests/{userId}/accept:
+    post:
+      operationId: acceptFriendRequest
+      summary: Accept the request this user sent
+      description: "Error codes: `request_not_found`, `user_not_found` (malformed ID)."
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Now friends
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
   /avatars/{userId}/{file}:
     get:
       operationId: getAvatar
@@ -343,6 +513,16 @@ components:
     bearer:
       type: http
       scheme: bearer
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: The other user.
+      schema:
+        type: string
+        format: uuid
 
   responses:
     Error:
@@ -439,3 +619,44 @@ components:
         current:
           type: boolean
           description: The session this request was made with.
+
+    Person:
+      description: Another user as the caller sees them; never includes the email.
+      type: object
+      required: [id, username, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          $ref: "#/components/schemas/Username"
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+
+    FriendshipStatus:
+      description: |
+        none; friends; outgoing (the caller asked, waiting for them);
+        incoming (they asked the caller).
+      type: string
+      enum: [none, friends, outgoing, incoming]
+
+    Friend:
+      type: object
+      required: [user, since]
+      properties:
+        user:
+          $ref: "#/components/schemas/Person"
+        since:
+          type: string
+          format: date-time
+
+    FriendRequest:
+      type: object
+      required: [user, createdAt]
+      properties:
+        user:
+          $ref: "#/components/schemas/Person"
+        createdAt:
+          type: string
+          format: date-time

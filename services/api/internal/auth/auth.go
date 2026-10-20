@@ -58,13 +58,7 @@ var (
 )
 
 // RateLimitError is returned when a caller has to wait before trying again.
-type RateLimitError struct {
-	RetryAfter time.Duration
-}
-
-func (e *RateLimitError) Error() string {
-	return fmt.Sprintf("rate limited, retry after %s", e.RetryAfter.Round(time.Second))
-}
+type RateLimitError = ratelimit.Error
 
 type Platform string
 

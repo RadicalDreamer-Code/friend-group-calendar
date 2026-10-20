@@ -10,6 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type Friendship struct {
+	RequesterID uuid.UUID  `json:"requester_id"`
+	AddresseeID uuid.UUID  `json:"addressee_id"`
+	Status      string     `json:"status"`
+	CreatedAt   time.Time  `json:"created_at"`
+	AcceptedAt  *time.Time `json:"accepted_at"`
+}
+
 type LoginCode struct {
 	ID        uuid.UUID `json:"id"`
 	Email     string    `json:"email"`

@@ -2,6 +2,7 @@ import { TabTrigger } from 'expo-router/ui';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useIncomingRequestCount } from '@/api/friends';
 import { createStyles } from '@/theme/ThemeProvider';
 import { hairline, layout } from '@/theme/tokens';
 
@@ -10,6 +11,7 @@ import { appTabs } from './tabs';
 
 /** Bottom tab bar for phone-sized screens. */
 export function TabBar() {
+  const requests = useIncomingRequestCount();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   return (
@@ -19,7 +21,7 @@ export function TabBar() {
     >
       {appTabs.map((tab) => (
         <TabTrigger key={tab.name} name={tab.name} asChild>
-          <NavItem tab={tab} variant="bar" />
+          <NavItem tab={tab} variant="bar" badge={tab.name === 'friends' ? requests : 0} />
         </TabTrigger>
       ))}
     </View>

@@ -7,6 +7,10 @@ import type { components, paths } from './schema';
 export type User = components['schemas']['User'];
 export type Session = components['schemas']['Session'];
 export type Platform = components['schemas']['Platform'];
+export type Person = components['schemas']['Person'];
+export type FriendshipStatus = components['schemas']['FriendshipStatus'];
+export type Friend = components['schemas']['Friend'];
+export type FriendRequest = components['schemas']['FriendRequest'];
 
 /**
  * Base URL of the Go API. Set EXPO_PUBLIC_API_URL to change it; on a phone

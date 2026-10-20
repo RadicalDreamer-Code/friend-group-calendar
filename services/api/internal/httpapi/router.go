@@ -15,6 +15,7 @@ import (
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/blob"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
 
@@ -26,6 +27,7 @@ type Options struct {
 	AllowedOrigins []string
 	Auth           *auth.Service
 	Users          *users.Service
+	Friends        *friends.Service
 	Avatars        blob.Store
 	// PublicURL is the API's own address as clients see it, for avatar URLs.
 	PublicURL    string
@@ -36,6 +38,7 @@ type Server struct {
 	db           *pgxpool.Pool
 	auth         *auth.Service
 	users        *users.Service
+	friends      *friends.Service
 	avatars      blob.Store
 	publicURL    string
 	cookieSecure bool
@@ -46,6 +49,7 @@ func NewRouter(o Options) (http.Handler, error) {
 		db:           o.DB,
 		auth:         o.Auth,
 		users:        o.Users,
+		friends:      o.Friends,
 		avatars:      o.Avatars,
 		publicURL:    o.PublicURL,
 		cookieSecure: o.CookieSecure,
@@ -101,6 +105,16 @@ func NewRouter(o Options) (http.Handler, error) {
 			r.Post("/me/sessions/revoke-others", s.handleRevokeOtherSessions)
 			r.Delete("/me/sessions/{sessionID}", s.handleRevokeSession)
 			r.Get("/username-availability", s.handleUsernameAvailability)
+
+			r.Group(func(r chi.Router) {
+				r.Use(requireUsername)
+				r.Get("/users/search", s.handleSearchUsers)
+				r.Get("/friends", s.handleListFriends)
+				r.Delete("/friends/{userID}", s.handleRemoveFriend)
+				r.Post("/friend-requests", s.handleSendFriendRequest)
+				r.Post("/friend-requests/{userID}/accept", s.handleAcceptFriendRequest)
+				r.Delete("/friend-requests/{userID}", s.handleDeleteFriendRequest)
+			})
 		})
 	})
 

@@ -64,6 +64,7 @@ apps/client      Expo + Expo Router app (web, iOS, Android), TypeScript
   src/auth       session state, sign-in flow, token storage (native)
 services/api     Go API: chi, pgx, goose migrations (embedded, run on startup), sqlc
   internal/auth  email codes, sessions          internal/users  username, avatar
+  internal/friends  friend requests, friendships, username search
 packages/api     openapi.yaml, the contract between client and API
 ```
 
@@ -80,6 +81,15 @@ served by the API.
 Production needs its own `AUTH_SECRET` (`openssl rand -hex 32`), an SMTP provider
 (`SMTP_*`, `MAIL_FROM`; Resend and Postmark both offer SMTP) and a bucket (`S3_*`).
 
+## Friends
+
+Find people by username (prefix search, at most 20 results, never showing email addresses),
+send a request, and they accept or decline. Asking someone who already asked you makes you
+friends straight away. Each pair of users has at most one row in `friendships`, pending or
+accepted; declining, cancelling and removing delete it. Requests are rate limited (30 an hour,
+3 a day to the same person) so a declined request cannot be repeated endlessly. Friend features
+need a username first.
+
 ## Design
 
 Minimal, Apple HIG-inspired: whitespace, hairlines, the system font and one accent.
@@ -95,7 +105,7 @@ Tracked on the Trello board "Event Planner".
 
 1. Foundation: repo, Docker, design tokens, theme, navigation ✅
 2. Email-code sign-in, long sessions, profile with username and avatar ✅
-3. Friends: requests and list
+3. Friends: requests and list ✅
 4. Calendars, members, roles and invite rights
 5. Entries, month view, accept / decline
 6. Polish, PWA, CI, production deployment
