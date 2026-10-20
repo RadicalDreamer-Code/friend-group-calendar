@@ -8,49 +8,79 @@ package store
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const attemptLoginCode = `-- name: AttemptLoginCode :one
 UPDATE login_codes
 SET attempts = attempts + 1
-WHERE email = $1
-  AND expires_at > $2
-  AND attempts < $3
+WHERE id = $1
+  AND email = $2
+  AND expires_at > $3
+  AND attempts < $4
 RETURNING code_hash
 `
 
 type AttemptLoginCodeParams struct {
+	ID          uuid.UUID `json:"id"`
 	Email       string    `json:"email"`
 	Now         time.Time `json:"now"`
 	MaxAttempts int32     `json:"max_attempts"`
 }
 
 // Counts one attempt and returns the hash to compare against. No row means
-// there is no usable code: never requested, expired, or out of attempts.
+// there is no usable code: unknown challenge, another address, expired, used,
+// or out of attempts.
 func (q *Queries) AttemptLoginCode(ctx context.Context, arg AttemptLoginCodeParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, attemptLoginCode, arg.Email, arg.Now, arg.MaxAttempts)
+	row := q.db.QueryRow(ctx, attemptLoginCode,
+		arg.ID,
+		arg.Email,
+		arg.Now,
+		arg.MaxAttempts,
+	)
 	var code_hash []byte
 	err := row.Scan(&code_hash)
 	return code_hash, err
 }
 
 const consumeLoginCode = `-- name: ConsumeLoginCode :execrows
-DELETE FROM login_codes WHERE email = $1 AND code_hash = $2
+DELETE FROM login_codes WHERE id = $1
 `
 
-type ConsumeLoginCodeParams struct {
-	Email    string `json:"email"`
-	CodeHash []byte `json:"code_hash"`
-}
-
-// Deletes the exact code that was checked, so a code can only be used once
-// even if a new one was requested in the meantime.
-func (q *Queries) ConsumeLoginCode(ctx context.Context, arg ConsumeLoginCodeParams) (int64, error) {
-	result, err := q.db.Exec(ctx, consumeLoginCode, arg.Email, arg.CodeHash)
+// Deletes the code that was checked, so it can only be used once even when
+// two requests verify it at the same time.
+func (q *Queries) ConsumeLoginCode(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeLoginCode, id)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const createLoginCode = `-- name: CreateLoginCode :one
+INSERT INTO login_codes (email, code_hash, expires_at, created_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateLoginCodeParams struct {
+	Email     string    `json:"email"`
+	CodeHash  []byte    `json:"code_hash"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (q *Queries) CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createLoginCode,
+		arg.Email,
+		arg.CodeHash,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteExpiredLoginCodes = `-- name: DeleteExpiredLoginCodes :execrows
@@ -63,31 +93,4 @@ func (q *Queries) DeleteExpiredLoginCodes(ctx context.Context, expiresAt time.Ti
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const upsertLoginCode = `-- name: UpsertLoginCode :exec
-INSERT INTO login_codes (email, code_hash, expires_at, created_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (email) DO UPDATE
-SET code_hash = excluded.code_hash,
-    attempts = 0,
-    expires_at = excluded.expires_at,
-    created_at = excluded.created_at
-`
-
-type UpsertLoginCodeParams struct {
-	Email     string    `json:"email"`
-	CodeHash  []byte    `json:"code_hash"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-func (q *Queries) UpsertLoginCode(ctx context.Context, arg UpsertLoginCodeParams) error {
-	_, err := q.db.Exec(ctx, upsertLoginCode,
-		arg.Email,
-		arg.CodeHash,
-		arg.ExpiresAt,
-		arg.CreatedAt,
-	)
-	return err
 }

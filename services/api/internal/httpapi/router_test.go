@@ -91,3 +91,26 @@ func TestClientIPIgnoresForwardedHeaders(t *testing.T) {
 		t.Fatalf("client IP = %q, want 203.0.113.9", got)
 	}
 }
+
+func TestRateLimitKeyGroupsIPv6By64(t *testing.T) {
+	cases := map[string]string{
+		"203.0.113.7:51000":               "203.0.113.7",
+		"[::ffff:203.0.113.7]:51000":      "203.0.113.7",
+		"[2001:db8:1:2:aaaa::1]:51000":    "2001:db8:1:2::/64",
+		"[2001:db8:1:2:bbbb:cccc::9]:443": "2001:db8:1:2::/64",
+		"[2001:db8:1:3::1]:51000":         "2001:db8:1:3::/64",
+		"not-an-address":                  "",
+	}
+	for remote, want := range cases {
+		var got string
+		h := middleware.ClientIPFromRemoteAddr(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = rateLimitKey(r)
+		}))
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = remote
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		if got != want {
+			t.Errorf("rateLimitKey(%q) = %q, want %q", remote, got, want)
+		}
+	}
+}

@@ -14,6 +14,14 @@ import (
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
 
+const (
+	// avatarUploadTimeout lets a full-size upload arrive at about 1 Mbit/s.
+	avatarUploadTimeout = 2 * time.Minute
+	// avatarProcessTimeout covers decoding, resizing and storing the image
+	// after the upload, including waiting for a free processing slot.
+	avatarProcessTimeout = 30 * time.Second
+)
+
 type userResponse struct {
 	ID        uuid.UUID `json:"id"`
 	Email     string    `json:"email"`
@@ -89,6 +97,12 @@ func (s *Server) writeUsernameError(w http.ResponseWriter, r *http.Request, err 
 // "file" field; that is what both browsers and React Native send natively.
 func (s *Server) handlePutAvatar(w http.ResponseWriter, r *http.Request) {
 	p := mustPrincipal(r.Context())
+
+	// The server's read and write timeouts are sized for small JSON requests;
+	// a 10 MB photo over mobile data can take over a minute to arrive.
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Now().Add(avatarUploadTimeout))
+	_ = rc.SetWriteDeadline(time.Now().Add(avatarUploadTimeout + avatarProcessTimeout))
 
 	// Leave room for the multipart framing around the file itself.
 	r.Body = http.MaxBytesReader(w, r.Body, avatar.MaxUploadBytes+64<<10)

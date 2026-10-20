@@ -11,20 +11,25 @@ import { api, unwrap, type Platform as ApiPlatform, type User } from './client';
 
 const sessionsQueryKey = ['sessions'] as const;
 
+/** Resolves to the challenge ID that verifying this code needs. */
 export function useRequestCode() {
   return useMutation({
-    mutationFn: (email: string) => unwrap(api.POST('/auth/request-code', { body: { email } })),
+    mutationFn: async (email: string) => {
+      const res = await unwrap(api.POST('/auth/request-code', { body: { email } }));
+      return res.challengeId;
+    },
   });
 }
 
 export function useVerifyCode() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ email, code }: { email: string; code: string }) => {
+    mutationFn: async ({ challengeId, email, code }: { challengeId: string; email: string; code: string }) => {
       const platform = Platform.OS as ApiPlatform;
       const res = await unwrap(
         api.POST('/auth/verify', {
           body: {
+            challengeId,
             email,
             code,
             platform,

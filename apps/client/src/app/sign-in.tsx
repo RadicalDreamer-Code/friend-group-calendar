@@ -8,6 +8,10 @@ import { AuthScreen } from '@/components/AuthScreen';
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 
+function isRateLimited(e: unknown) {
+  return e instanceof ApiError && e.code === 'rate_limited';
+}
+
 export default function SignInScreen() {
   const flow = useSignInFlow();
   const [email, setEmail] = useState(flow.email ?? '');
@@ -17,23 +21,22 @@ export default function SignInScreen() {
     const address = email.trim();
     if (!address || requestCode.isPending) return;
     requestCode.mutate(address, {
-      onSuccess: () => {
-        flow.setEmail(address);
+      onSuccess: (challengeId) => {
+        flow.setChallenge(address, challengeId);
         router.push('/verify');
       },
       // Waiting out the resend cooldown is no reason to block someone who
-      // already has a code in their inbox.
+      // already has a code for this address in their inbox.
       onError: (e) => {
-        if (e instanceof ApiError && e.code === 'rate_limited') {
-          flow.setEmail(address);
-          router.push('/verify');
-        }
+        if (isRateLimited(e) && hasCodeFor(address)) router.push('/verify');
       },
     });
   };
 
-  const error =
-    requestCode.error && !(requestCode.error instanceof ApiError && requestCode.error.code === 'rate_limited');
+  const hasCodeFor = (address: string) =>
+    flow.challengeId !== null && flow.email?.toLowerCase() === address.toLowerCase();
+
+  const error = requestCode.error && !(isRateLimited(requestCode.error) && hasCodeFor(email.trim()));
 
   return (
     <AuthScreen

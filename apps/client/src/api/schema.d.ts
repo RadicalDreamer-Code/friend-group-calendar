@@ -32,9 +32,11 @@ export interface paths {
         put?: never;
         /**
          * Email a 6-digit sign-in code
-         * @description Replaces any earlier code for the address. Codes expire after 10
-         *     minutes and allow 5 attempts. The response is the same whether or not
-         *     an account exists; the account is created on the first verify.
+         * @description Returns a challenge ID that only this client receives; send it to
+         *     /auth/verify together with the code. Codes expire after 10 minutes and
+         *     allow 5 attempts, and stay valid when more codes are requested. The
+         *     response is the same whether or not an account exists; the account is
+         *     created on the first verify.
          */
         post: operations["requestCode"];
         delete?: never;
@@ -55,7 +57,8 @@ export interface paths {
         /**
          * Exchange a code for a session
          * @description Error codes: `invalid_code` (wrong code, try again), `code_expired`
-         *     (request a new code), `invalid_email`, `invalid_platform`.
+         *     (request a new code; also for an unknown challenge), `invalid_email`,
+         *     `invalid_platform`.
          */
         post: operations["verifyCode"];
         delete?: never;
@@ -335,11 +338,16 @@ export interface operations {
         };
         responses: {
             /** @description Code sent */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        challengeId: string;
+                    };
+                };
             };
             400: components["responses"]["Error"];
             429: components["responses"]["RateLimited"];
@@ -356,6 +364,11 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description From the /auth/request-code response.
+                     */
+                    challengeId: string;
                     /** Format: email */
                     email: string;
                     code: string;

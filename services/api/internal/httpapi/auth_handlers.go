@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
 )
@@ -14,15 +15,20 @@ type requestCodeRequest struct {
 	Email string `json:"email"`
 }
 
+type requestCodeResponse struct {
+	// ChallengeID goes back with the code to /auth/verify.
+	ChallengeID uuid.UUID `json:"challengeId"`
+}
+
 func (s *Server) handleRequestCode(w http.ResponseWriter, r *http.Request) {
 	var req requestCodeRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	err := s.auth.RequestCode(r.Context(), req.Email, middleware.GetClientIP(r.Context()))
+	challengeID, err := s.auth.RequestCode(r.Context(), req.Email, rateLimitKey(r))
 	switch {
 	case err == nil:
-		w.WriteHeader(http.StatusNoContent)
+		writeJSON(w, http.StatusOK, requestCodeResponse{ChallengeID: challengeID})
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeError(w, http.StatusBadRequest, "invalid_email", "Please enter a valid email address.")
 	case writeRateLimited(w, err):
@@ -33,10 +39,11 @@ func (s *Server) handleRequestCode(w http.ResponseWriter, r *http.Request) {
 }
 
 type verifyRequest struct {
-	Email      string        `json:"email"`
-	Code       string        `json:"code"`
-	Platform   auth.Platform `json:"platform"`
-	DeviceName string        `json:"deviceName"`
+	ChallengeID string        `json:"challengeId"`
+	Email       string        `json:"email"`
+	Code        string        `json:"code"`
+	Platform    auth.Platform `json:"platform"`
+	DeviceName  string        `json:"deviceName"`
 }
 
 type verifyResponse struct {
@@ -51,13 +58,16 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	// A missing or malformed ID matches no code, so it reads as code_expired.
+	challengeID, _ := uuid.Parse(req.ChallengeID)
 	res, err := s.auth.Verify(r.Context(), auth.VerifyInput{
-		Email:      req.Email,
-		Code:       req.Code,
-		Platform:   req.Platform,
-		DeviceName: req.DeviceName,
-		UserAgent:  r.UserAgent(),
-		ClientIP:   middleware.GetClientIP(r.Context()),
+		ChallengeID: challengeID,
+		Email:       req.Email,
+		Code:        req.Code,
+		Platform:    req.Platform,
+		DeviceName:  req.DeviceName,
+		UserAgent:   r.UserAgent(),
+		Client:      rateLimitKey(r),
 	})
 	switch {
 	case err == nil:
@@ -87,6 +97,19 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		resp.Token = res.Token
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// rateLimitKey identifies the client for the sign-in rate limits. An IPv6
+// client usually controls a whole /64, so the /64 counts as one client;
+// otherwise every address in it would get a budget of its own.
+func rateLimitKey(r *http.Request) string {
+	ip := middleware.GetClientIPAddr(r.Context()).Unmap()
+	if ip.Is6() {
+		if prefix, err := ip.Prefix(64); err == nil {
+			return prefix.String()
+		}
+	}
+	return middleware.GetClientIP(r.Context())
 }
 
 // handleLogout ends the current session. It succeeds without one too, so a

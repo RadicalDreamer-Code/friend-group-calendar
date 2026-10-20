@@ -1,20 +1,26 @@
-import { createContext, use, useMemo, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 
 /**
- * Carries the email from the first sign-in step to the code step. It stays
- * in memory rather than in the URL so the address does not end up in
- * browser history; reloading the code step starts over.
+ * Carries the email and the code's challenge ID from the first sign-in step
+ * to the code step. They stay in memory rather than in the URL so the address
+ * does not end up in browser history; reloading the code step starts over.
  */
 type SignInFlow = {
   email: string | null;
-  setEmail: (email: string) => void;
+  /** From the last code requested for `email`; verify needs it with the code. */
+  challengeId: string | null;
+  setChallenge: (email: string, challengeId: string) => void;
 };
 
 const SignInFlowContext = createContext<SignInFlow | null>(null);
 
 export function SignInFlowProvider({ children }: { children: ReactNode }) {
-  const [email, setEmail] = useState<string | null>(null);
-  const value = useMemo(() => ({ email, setEmail }), [email]);
+  const [state, setState] = useState<{ email: string; challengeId: string } | null>(null);
+  const setChallenge = useCallback((email: string, challengeId: string) => setState({ email, challengeId }), []);
+  const value = useMemo(
+    () => ({ email: state?.email ?? null, challengeId: state?.challengeId ?? null, setChallenge }),
+    [state, setChallenge],
+  );
   return <SignInFlowContext value={value}>{children}</SignInFlowContext>;
 }
 

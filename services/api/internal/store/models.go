@@ -11,6 +11,7 @@ import (
 )
 
 type LoginCode struct {
+	ID        uuid.UUID `json:"id"`
 	Email     string    `json:"email"`
 	CodeHash  []byte    `json:"code_hash"`
 	Attempts  int32     `json:"attempts"`

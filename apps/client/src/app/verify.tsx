@@ -17,12 +17,20 @@ const CODE_LENGTH = 6;
 const RESEND_SECONDS = 30;
 
 export default function VerifyScreen() {
-  const { email } = useSignInFlow();
-  if (!email) return <Redirect href="/sign-in" />;
-  return <VerifyForm email={email} />;
+  const { email, challengeId, setChallenge } = useSignInFlow();
+  if (!email || !challengeId) return <Redirect href="/sign-in" />;
+  return <VerifyForm email={email} challengeId={challengeId} setChallenge={setChallenge} />;
 }
 
-function VerifyForm({ email }: { email: string }) {
+function VerifyForm({
+  email,
+  challengeId,
+  setChallenge,
+}: {
+  email: string;
+  challengeId: string;
+  setChallenge: (email: string, challengeId: string) => void;
+}) {
   const styles = useStyles();
   const [code, setCode] = useState('');
   const verify = useVerifyCode();
@@ -32,9 +40,9 @@ function VerifyForm({ email }: { email: string }) {
   // Submit as soon as the last digit is in, including after paste or autofill.
   useEffect(() => {
     if (code.length === CODE_LENGTH && verify.isIdle) {
-      verify.mutate({ email, code }, { onError: () => setCode('') });
+      verify.mutate({ challengeId, email, code }, { onError: () => setCode('') });
     }
-  }, [code, email, verify]);
+  }, [code, challengeId, email, verify]);
 
   const expired = verify.error instanceof ApiError && verify.error.code === 'code_expired';
   const message =
@@ -89,7 +97,7 @@ function VerifyForm({ email }: { email: string }) {
           onPress={() => {
             verify.reset();
             setCode('');
-            resend.mutate(email);
+            resend.mutate(email, { onSuccess: (id) => setChallenge(email, id) });
           }}
         />
         <Button variant="plain" title="Use a different email" onPress={() => router.back()} />

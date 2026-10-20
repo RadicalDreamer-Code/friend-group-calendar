@@ -3,9 +3,12 @@ package auth
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/ratelimit"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/testutil"
@@ -28,18 +31,33 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-func (f *fixture) signIn(t *testing.T, email string) VerifyResult {
+// request asks for a code and returns its challenge and the emailed code.
+func (f *fixture) request(t *testing.T, email, client string) (uuid.UUID, string) {
 	t.Helper()
-	ctx := context.Background()
-	if err := f.svc.RequestCode(ctx, email, "203.0.113.1"); err != nil {
+	id, err := f.svc.RequestCode(context.Background(), email, client)
+	if err != nil {
 		t.Fatal(err)
 	}
 	// Mail goes to the normalized address.
-	res, err := f.svc.Verify(ctx, VerifyInput{Email: email, Code: f.mail.LastCode(t, strings.ToLower(email)), Platform: PlatformWeb})
+	return id, f.mail.LastCode(t, strings.ToLower(email))
+}
+
+func (f *fixture) signIn(t *testing.T, email string) VerifyResult {
+	t.Helper()
+	id, code := f.request(t, email, "203.0.113.1")
+	res, err := f.svc.Verify(context.Background(), VerifyInput{ChallengeID: id, Email: email, Code: code, Platform: PlatformWeb})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return res
+}
+
+// otherCode returns a valid-looking code that differs from code.
+func otherCode(code string) string {
+	if code == "000000" {
+		return "111111"
+	}
+	return "000000"
 }
 
 func TestVerifyCreatesUserOnFirstSignInOnly(t *testing.T) {
@@ -60,11 +78,8 @@ func TestVerifyCreatesUserOnFirstSignInOnly(t *testing.T) {
 func TestCodeIsSingleUse(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	if err := f.svc.RequestCode(ctx, "ada@example.com", "ip"); err != nil {
-		t.Fatal(err)
-	}
-	code := f.mail.LastCode(t, "ada@example.com")
-	in := VerifyInput{Email: "ada@example.com", Code: code, Platform: PlatformIOS}
+	id, code := f.request(t, "ada@example.com", "ip")
+	in := VerifyInput{ChallengeID: id, Email: "ada@example.com", Code: code, Platform: PlatformIOS}
 	if _, err := f.svc.Verify(ctx, in); err != nil {
 		t.Fatal(err)
 	}
@@ -73,32 +88,54 @@ func TestCodeIsSingleUse(t *testing.T) {
 	}
 }
 
-func TestNewCodeReplacesOldOne(t *testing.T) {
+func TestCodeOnlyWorksWithItsChallenge(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	_ = f.svc.RequestCode(ctx, "ada@example.com", "ip")
-	old := f.mail.LastCode(t, "ada@example.com")
-	_ = f.svc.RequestCode(ctx, "ada@example.com", "ip")
-	fresh := f.mail.LastCode(t, "ada@example.com")
-	if old == fresh {
+	firstID, first := f.request(t, "ada@example.com", "ip")
+	secondID, second := f.request(t, "ada@example.com", "ip")
+	if first == second {
 		t.Skip("both random codes were equal; nothing to compare")
 	}
 
-	_, err := f.svc.Verify(ctx, VerifyInput{Email: "ada@example.com", Code: old, Platform: PlatformWeb})
+	_, err := f.svc.Verify(ctx, VerifyInput{ChallengeID: secondID, Email: "ada@example.com", Code: first, Platform: PlatformWeb})
 	if !errors.Is(err, ErrInvalidCode) {
-		t.Fatalf("old code: err = %v, want ErrInvalidCode", err)
+		t.Fatalf("first code on the second challenge: err = %v, want ErrInvalidCode", err)
 	}
-	if _, err := f.svc.Verify(ctx, VerifyInput{Email: "ada@example.com", Code: fresh, Platform: PlatformWeb}); err != nil {
-		t.Fatalf("new code: %v", err)
+	_, err = f.svc.Verify(ctx, VerifyInput{ChallengeID: firstID, Email: "bob@example.com", Code: first, Platform: PlatformWeb})
+	if !errors.Is(err, ErrCodeExpired) {
+		t.Fatalf("challenge with another address: err = %v, want ErrCodeExpired", err)
+	}
+	// Requesting a second code does not invalidate the first.
+	if _, err := f.svc.Verify(ctx, VerifyInput{ChallengeID: firstID, Email: "ada@example.com", Code: first, Platform: PlatformWeb}); err != nil {
+		t.Fatalf("first code on its own challenge: %v", err)
+	}
+}
+
+func TestOthersCannotLockTheOwnerOut(t *testing.T) {
+	f := newFixture(t)
+	f.svc.emailCooldown = ratelimit.New(1, 30*time.Second)
+	ctx := context.Background()
+	ownerID, code := f.request(t, "ada@example.com", "owner")
+
+	// Someone else asks for codes to the same address and guesses wrong
+	// until their own challenge is used up.
+	attackerID, attackerCode := f.request(t, "ada@example.com", "attacker")
+	for range MaxCodeAttempts + 1 {
+		_, _ = f.svc.Verify(ctx, VerifyInput{ChallengeID: attackerID, Email: "ada@example.com", Code: otherCode(attackerCode), Platform: PlatformWeb})
+		_, _ = f.svc.Verify(ctx, VerifyInput{ChallengeID: uuid.New(), Email: "ada@example.com", Code: code, Platform: PlatformWeb})
+	}
+
+	if _, err := f.svc.Verify(ctx, VerifyInput{ChallengeID: ownerID, Email: "ada@example.com", Code: code, Platform: PlatformWeb}); err != nil {
+		t.Fatalf("owner's code after someone else's attempts: %v", err)
 	}
 }
 
 func TestCodeExpires(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	_ = f.svc.RequestCode(ctx, "ada@example.com", "ip")
+	id, code := f.request(t, "ada@example.com", "ip")
 	f.now = f.now.Add(CodeTTL + time.Second)
-	_, err := f.svc.Verify(ctx, VerifyInput{Email: "ada@example.com", Code: f.mail.LastCode(t, "ada@example.com"), Platform: PlatformWeb})
+	_, err := f.svc.Verify(ctx, VerifyInput{ChallengeID: id, Email: "ada@example.com", Code: code, Platform: PlatformWeb})
 	if !errors.Is(err, ErrCodeExpired) {
 		t.Fatalf("err = %v, want ErrCodeExpired", err)
 	}
@@ -107,19 +144,14 @@ func TestCodeExpires(t *testing.T) {
 func TestWrongAttemptsUseUpTheCode(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	_ = f.svc.RequestCode(ctx, "ada@example.com", "ip")
-	code := f.mail.LastCode(t, "ada@example.com")
-	wrong := "000000"
-	if code == wrong {
-		wrong = "111111"
-	}
+	id, code := f.request(t, "ada@example.com", "ip")
 	for i := range MaxCodeAttempts {
-		_, err := f.svc.Verify(ctx, VerifyInput{Email: "ada@example.com", Code: wrong, Platform: PlatformWeb})
+		_, err := f.svc.Verify(ctx, VerifyInput{ChallengeID: id, Email: "ada@example.com", Code: otherCode(code), Platform: PlatformWeb})
 		if !errors.Is(err, ErrInvalidCode) {
 			t.Fatalf("attempt %d: err = %v, want ErrInvalidCode", i+1, err)
 		}
 	}
-	_, err := f.svc.Verify(ctx, VerifyInput{Email: "ada@example.com", Code: code, Platform: PlatformWeb})
+	_, err := f.svc.Verify(ctx, VerifyInput{ChallengeID: id, Email: "ada@example.com", Code: code, Platform: PlatformWeb})
 	if !errors.Is(err, ErrCodeExpired) {
 		t.Fatalf("right code after %d wrong ones: err = %v, want ErrCodeExpired", MaxCodeAttempts, err)
 	}
@@ -129,15 +161,34 @@ func TestRequestCodeCooldown(t *testing.T) {
 	f := newFixture(t)
 	f.svc.emailCooldown = ratelimit.New(1, 30*time.Second)
 	ctx := context.Background()
-	if err := f.svc.RequestCode(ctx, "ada@example.com", "ip"); err != nil {
-		t.Fatal(err)
-	}
+	f.request(t, "ada@example.com", "ip")
 	var rl *RateLimitError
-	if err := f.svc.RequestCode(ctx, "ada@example.com", "ip"); !errors.As(err, &rl) {
+	if _, err := f.svc.RequestCode(ctx, "ada@example.com", "ip"); !errors.As(err, &rl) {
 		t.Fatalf("second request: err = %v, want RateLimitError", err)
 	}
 	if len(f.mail.Sent()) != 1 {
 		t.Fatal("a rate-limited request must not send an email")
+	}
+	// The cooldown is per client: another one is not held up by it.
+	f.request(t, "ada@example.com", "other-ip")
+}
+
+func TestEmailHourlyLimitSpansClients(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	perClient, total := DefaultLimits.ClientEmailHourly.N, DefaultLimits.EmailHourly.N
+	var rl *RateLimitError
+	for range perClient {
+		f.request(t, "ada@example.com", "a")
+	}
+	if _, err := f.svc.RequestCode(ctx, "ada@example.com", "a"); !errors.As(err, &rl) {
+		t.Fatalf("request %d from one client: err = %v, want RateLimitError", perClient+1, err)
+	}
+	for i := perClient; i < total; i++ {
+		f.request(t, "ada@example.com", "client-"+strconv.Itoa(i))
+	}
+	if _, err := f.svc.RequestCode(ctx, "ada@example.com", "yet-another"); !errors.As(err, &rl) {
+		t.Fatalf("request %d to one address: err = %v, want RateLimitError", total+1, err)
 	}
 }
 

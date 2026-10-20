@@ -45,9 +45,11 @@ paths:
       operationId: requestCode
       summary: Email a 6-digit sign-in code
       description: |
-        Replaces any earlier code for the address. Codes expire after 10
-        minutes and allow 5 attempts. The response is the same whether or not
-        an account exists; the account is created on the first verify.
+        Returns a challenge ID that only this client receives; send it to
+        /auth/verify together with the code. Codes expire after 10 minutes and
+        allow 5 attempts, and stay valid when more codes are requested. The
+        response is the same whether or not an account exists; the account is
+        created on the first verify.
       security: []
       requestBody:
         required: true
@@ -61,8 +63,17 @@ paths:
                   type: string
                   format: email
       responses:
-        "204":
+        "200":
           description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeId]
+                properties:
+                  challengeId:
+                    type: string
+                    format: uuid
         "400":
           $ref: "#/components/responses/Error"
         "429":
@@ -76,7 +87,8 @@ paths:
       summary: Exchange a code for a session
       description: |
         Error codes: `invalid_code` (wrong code, try again), `code_expired`
-        (request a new code), `invalid_email`, `invalid_platform`.
+        (request a new code; also for an unknown challenge), `invalid_email`,
+        `invalid_platform`.
       security: []
       requestBody:
         required: true
@@ -84,8 +96,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, code, platform]
+              required: [challengeId, email, code, platform]
               properties:
+                challengeId:
+                  type: string
+                  format: uuid
+                  description: From the /auth/request-code response.
                 email:
                   type: string
                   format: email

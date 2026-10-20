@@ -1,10 +1,11 @@
 // Package auth implements passwordless sign-in with emailed codes and the
 // long-lived sessions that follow it.
 //
-// Flow: RequestCode emails a 6-digit code; Verify checks it, creates the user
-// on their first sign-in and returns a new session token. The token goes into
-// an HttpOnly cookie on web and into secure storage on native; Authenticate
-// turns it back into a Principal on every request.
+// Flow: RequestCode emails a 6-digit code and returns a challenge ID to the
+// client that asked for it; Verify checks the code against that challenge,
+// creates the user on their first sign-in and returns a new session token.
+// The token goes into an HttpOnly cookie on web and into secure storage on
+// native; Authenticate turns it back into a Principal on every request.
 package auth
 
 import (
@@ -90,10 +91,11 @@ type Service struct {
 	secret []byte
 	now    func() time.Time
 
-	emailCooldown *ratelimit.Limiter
-	emailHourly   *ratelimit.Limiter
-	ipCodes       *ratelimit.Limiter
-	ipVerify      *ratelimit.Limiter
+	emailCooldown     *ratelimit.Limiter
+	clientEmailHourly *ratelimit.Limiter
+	emailHourly       *ratelimit.Limiter
+	ipCodes           *ratelimit.Limiter
+	ipVerify          *ratelimit.Limiter
 }
 
 // Limit allows N events per Window.
@@ -102,11 +104,21 @@ type Limit struct {
 	Window time.Duration
 }
 
+// The per-address limits that a sign-in could trip over are counted per
+// client, so someone else asking for codes to the same address cannot lock
+// its owner out. Clients are IP addresses (IPv6: their /64).
 type Limits struct {
-	// EmailCooldown spaces out codes to one address, so a double tap does
-	// not replace the code that is already on its way.
+	// EmailCooldown spaces out codes from one client to one address, so a
+	// double tap does not send a second code while the first is on its way.
 	EmailCooldown Limit
-	EmailHourly   Limit
+	// ClientEmailHourly caps the codes one client requests for one address.
+	ClientEmailHourly Limit
+	// EmailHourly caps the codes sent to one address by all clients together,
+	// against flooding a mailbox. It is a multiple of ClientEmailHourly, so
+	// it takes several clients to use it up. It also bounds guessing: at most
+	// EmailHourly.N × MaxCodeAttempts guesses per address and hour, each
+	// costing the attacker a code that lands in the owner's inbox.
+	EmailHourly Limit
 	// IPCodes caps code requests per client IP against mass sending.
 	IPCodes Limit
 	// IPVerify caps verify attempts per client IP, on top of MaxCodeAttempts
@@ -115,23 +127,25 @@ type Limits struct {
 }
 
 var DefaultLimits = Limits{
-	EmailCooldown: Limit{1, 30 * time.Second},
-	EmailHourly:   Limit{5, time.Hour},
-	IPCodes:       Limit{20, time.Hour},
-	IPVerify:      Limit{30, 15 * time.Minute},
+	EmailCooldown:     Limit{1, 30 * time.Second},
+	ClientEmailHourly: Limit{5, time.Hour},
+	EmailHourly:       Limit{10, time.Hour},
+	IPCodes:           Limit{20, time.Hour},
+	IPVerify:          Limit{30, 15 * time.Minute},
 }
 
 func NewService(db *pgxpool.Pool, sender mailer.Sender, secret []byte, limits Limits) *Service {
 	return &Service{
-		db:            db,
-		q:             store.New(db),
-		mail:          sender,
-		secret:        secret,
-		now:           time.Now,
-		emailCooldown: ratelimit.New(limits.EmailCooldown.N, limits.EmailCooldown.Window),
-		emailHourly:   ratelimit.New(limits.EmailHourly.N, limits.EmailHourly.Window),
-		ipCodes:       ratelimit.New(limits.IPCodes.N, limits.IPCodes.Window),
-		ipVerify:      ratelimit.New(limits.IPVerify.N, limits.IPVerify.Window),
+		db:                db,
+		q:                 store.New(db),
+		mail:              sender,
+		secret:            secret,
+		now:               time.Now,
+		emailCooldown:     ratelimit.New(limits.EmailCooldown.N, limits.EmailCooldown.Window),
+		clientEmailHourly: ratelimit.New(limits.ClientEmailHourly.N, limits.ClientEmailHourly.Window),
+		emailHourly:       ratelimit.New(limits.EmailHourly.N, limits.EmailHourly.Window),
+		ipCodes:           ratelimit.New(limits.IPCodes.N, limits.IPCodes.Window),
+		ipVerify:          ratelimit.New(limits.IPVerify.N, limits.IPVerify.Window),
 	}
 }
 
@@ -153,51 +167,62 @@ func NormalizeEmail(raw string) (string, error) {
 	return email, nil
 }
 
-// RequestCode emails a fresh code to the address, replacing any earlier one.
+// RequestCode emails a fresh code to the address and returns the challenge
+// ID that Verify needs along with it. Only the caller learns the ID, so codes
+// requested by anyone else for the same address do not affect this one.
 // It behaves the same whether or not an account exists for the address.
-func (s *Service) RequestCode(ctx context.Context, rawEmail, clientIP string) error {
+func (s *Service) RequestCode(ctx context.Context, rawEmail, client string) (challengeID uuid.UUID, err error) {
 	email, err := NormalizeEmail(rawEmail)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
+	clientEmail := client + "\x00" + email
 	for _, check := range []struct {
 		l   *ratelimit.Limiter
 		key string
 	}{
-		{s.ipCodes, clientIP},
-		{s.emailCooldown, email},
+		{s.ipCodes, client},
+		{s.emailCooldown, clientEmail},
+		{s.clientEmailHourly, clientEmail},
 		{s.emailHourly, email},
 	} {
 		if ok, wait := check.l.Allow(check.key); !ok {
-			return &RateLimitError{RetryAfter: wait}
+			return uuid.Nil, &RateLimitError{RetryAfter: wait}
 		}
 	}
 
 	code, err := generateCode()
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	now := s.now()
-	if err := s.q.UpsertLoginCode(ctx, store.UpsertLoginCodeParams{
+	challengeID, err = s.q.CreateLoginCode(ctx, store.CreateLoginCodeParams{
 		Email:     email,
 		CodeHash:  s.hashCode(email, code),
 		ExpiresAt: now.Add(CodeTTL),
 		CreatedAt: now,
-	}); err != nil {
-		return fmt.Errorf("store login code: %w", err)
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("store login code: %w", err)
 	}
-	return s.mail.Send(ctx, codeEmail(email, code))
+	if err := s.mail.Send(ctx, codeEmail(email, code)); err != nil {
+		return uuid.Nil, err
+	}
+	return challengeID, nil
 }
 
 type VerifyInput struct {
-	Email    string
-	Code     string
-	Platform Platform
+	// ChallengeID is what RequestCode returned for this code.
+	ChallengeID uuid.UUID
+	Email       string
+	Code        string
+	Platform    Platform
 	// DeviceName is shown in the device list. Optional; derived from the
 	// user agent when empty.
 	DeviceName string
 	UserAgent  string
-	ClientIP   string
+	// Client identifies the caller for rate limits, like RequestCode's client.
+	Client string
 }
 
 type VerifyResult struct {
@@ -220,7 +245,7 @@ func (s *Service) Verify(ctx context.Context, in VerifyInput) (VerifyResult, err
 	if !isCode(code) {
 		return VerifyResult{}, ErrInvalidCode
 	}
-	if ok, wait := s.ipVerify.Allow(in.ClientIP); !ok {
+	if ok, wait := s.ipVerify.Allow(in.Client); !ok {
 		return VerifyResult{}, &RateLimitError{RetryAfter: wait}
 	}
 
@@ -228,6 +253,7 @@ func (s *Service) Verify(ctx context.Context, in VerifyInput) (VerifyResult, err
 	// Counting the attempt commits on its own, so wrong guesses are counted
 	// even though the rest of the sign-in never happens.
 	storedHash, err := s.q.AttemptLoginCode(ctx, store.AttemptLoginCodeParams{
+		ID:          in.ChallengeID,
 		Email:       email,
 		Now:         now,
 		MaxAttempts: MaxCodeAttempts,
@@ -254,7 +280,7 @@ func (s *Service) Verify(ctx context.Context, in VerifyInput) (VerifyResult, err
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
 	q := s.q.WithTx(tx)
 
-	consumed, err := q.ConsumeLoginCode(ctx, store.ConsumeLoginCodeParams{Email: email, CodeHash: storedHash})
+	consumed, err := q.ConsumeLoginCode(ctx, in.ChallengeID)
 	if err != nil {
 		return VerifyResult{}, fmt.Errorf("consume login code: %w", err)
 	}
