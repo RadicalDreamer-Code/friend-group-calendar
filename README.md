@@ -65,6 +65,7 @@ apps/client      Expo + Expo Router app (web, iOS, Android), TypeScript
 services/api     Go API: chi, pgx, goose migrations (embedded, run on startup), sqlc
   internal/auth  email codes, sessions          internal/users  username, avatar
   internal/friends  friend requests, friendships, username search
+  internal/calendars  calendars, members, roles and who may do what
 packages/api     openapi.yaml, the contract between client and API
 ```
 
@@ -90,6 +91,21 @@ accepted; declining, cancelling and removing delete it. Requests are rate limite
 3 a day to the same person) so a declined request cannot be repeated endlessly. Friend features
 need a username first.
 
+## Calendars
+
+Anyone with a username can create a calendar and becomes its owner. There is exactly one
+owner, who renames or deletes the calendar, changes members' roles, removes members and can
+make another member the owner (and then stays on as an editor who can invite). Editors will add
+and edit entries, viewers see them and accept or decline. The owner can invite friends, and so
+can members who were given the invite right, either one by one or with "Everyone can invite".
+Only your own friends can be invited; they join right away, as viewers unless you pick a role,
+and never with a higher role than yours. Everyone but the owner can leave.
+
+All permissions are decided in one place, `Membership.Can` in `internal/calendars`, and every
+change locks the calendar row first so concurrent changes (two transfers at once, say) cannot
+leave it in a broken state. People who are not members get `404 calendar_not_found`, so
+calendar IDs reveal nothing. Limits: 50 members per calendar, 50 owned calendars per user.
+
 ## Design
 
 Minimal, Apple HIG-inspired: whitespace, hairlines, the system font and one accent.
@@ -106,6 +122,6 @@ Tracked on the Trello board "Event Planner".
 1. Foundation: repo, Docker, design tokens, theme, navigation ✅
 2. Email-code sign-in, long sessions, profile with username and avatar ✅
 3. Friends: requests and list ✅
-4. Calendars, members, roles and invite rights
+4. Calendars, members, roles and invite rights ✅
 5. Entries, month view, accept / decline
 6. Polish, PWA, CI, production deployment

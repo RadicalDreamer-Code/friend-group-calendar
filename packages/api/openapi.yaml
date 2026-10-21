@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Friend Group Calendar API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     HTTP API for the friend group calendar. This file is the contract between
     services/api (Go) and apps/client (TypeScript). After changing it, run
@@ -478,6 +478,251 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /calendars:
+    get:
+      operationId: listCalendars
+      summary: The caller's calendars
+      responses:
+        "200":
+          description: Calendars the caller is a member of, by name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [calendars]
+                properties:
+                  calendars:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CalendarSummary"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createCalendar
+      summary: Create a calendar owned by the caller
+      description: "Error codes: `invalid_name`, `too_many_calendars` (50 owned)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  $ref: "#/components/schemas/CalendarName"
+      responses:
+        "201":
+          description: The new calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    get:
+      operationId: getCalendar
+      summary: A calendar with all its members
+      description: "`calendar_not_found` also when the caller is not a member."
+      responses:
+        "200":
+          description: The calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateCalendar
+      summary: Rename the calendar or change who may invite (owner only)
+      description: "Error codes: `invalid_name`, `forbidden`, `calendar_not_found`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  $ref: "#/components/schemas/CalendarName"
+                membersCanInvite:
+                  type: boolean
+                  description: Lets every member invite friends.
+      responses:
+        "200":
+          description: The updated calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteCalendar
+      summary: Delete the calendar for everyone (owner only)
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}/members:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    post:
+      operationId: inviteMember
+      summary: Add a friend to the calendar
+      description: |
+        Open to the owner and to members who can invite. Only the caller's
+        friends can be invited; they join right away, as viewers unless a role
+        is given, and never with a higher role than the caller's.
+        Error codes: `forbidden` (no invite right), `not_friends`,
+        `user_not_found`, `already_member`, `invalid_role`, `role_too_high`,
+        `calendar_full` (50 members).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                role:
+                  $ref: "#/components/schemas/MemberRole"
+      responses:
+        "200":
+          description: The calendar with the new member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      operationId: updateMember
+      summary: Change a member's role or invite right (owner only)
+      description: "Error codes: `forbidden`, `member_not_found`, `member_is_owner`, `invalid_role`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  $ref: "#/components/schemas/MemberRole"
+                canInvite:
+                  type: boolean
+      responses:
+        "200":
+          description: The updated calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: removeMember
+      summary: Remove a member (owner only), or leave with your own ID
+      description: |
+        Anyone but the owner can leave. Error codes: `forbidden`,
+        `member_not_found`, `owner_must_transfer` (the owner tried to leave).
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}/transfer:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    post:
+      operationId: transferOwnership
+      summary: Make another member the owner (owner only)
+      description: |
+        The previous owner stays on as an editor who can invite.
+        Error codes: `forbidden`, `member_not_found`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: The calendar afterwards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
   /avatars/{userId}/{file}:
     get:
       operationId: getAvatar
@@ -518,6 +763,13 @@ components:
       scheme: bearer
 
   parameters:
+    CalendarId:
+      name: calendarId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     UserId:
       name: userId
       in: path
@@ -661,5 +913,86 @@ components:
         user:
           $ref: "#/components/schemas/Person"
         createdAt:
+          type: string
+          format: date-time
+
+    CalendarName:
+      type: string
+      minLength: 1
+      maxLength: 50
+      description: Trimmed; 1–50 characters.
+
+    Role:
+      description: |
+        owner: one per calendar, manages it and its members. editor: adds and
+        edits entries. viewer: sees entries and answers them.
+      type: string
+      enum: [owner, editor, viewer]
+
+    MemberRole:
+      description: A role that can be given to a member; ownership is transferred instead.
+      type: string
+      enum: [editor, viewer]
+
+    CalendarSummary:
+      type: object
+      required: [id, name, role, canInvite, memberCount, members]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        canInvite:
+          type: boolean
+          description: Whether the caller may invite friends.
+        memberCount:
+          type: integer
+        members:
+          description: The first 4 members, owner first.
+          type: array
+          items:
+            $ref: "#/components/schemas/Person"
+
+    Calendar:
+      type: object
+      required: [id, name, membersCanInvite, createdAt, role, canInvite, members]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        membersCanInvite:
+          type: boolean
+          description: Every member may invite, whatever their own invite right.
+        createdAt:
+          type: string
+          format: date-time
+        role:
+          $ref: "#/components/schemas/Role"
+        canInvite:
+          type: boolean
+          description: Whether the caller may invite friends.
+        members:
+          description: Owner first, then editors, then viewers, each by username.
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarMember"
+
+    CalendarMember:
+      type: object
+      required: [user, role, canInvite, joinedAt]
+      properties:
+        user:
+          $ref: "#/components/schemas/Person"
+        role:
+          $ref: "#/components/schemas/Role"
+        canInvite:
+          type: boolean
+          description: The member's own invite right; always true for the owner.
+        joinedAt:
           type: string
           format: date-time

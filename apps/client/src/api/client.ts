@@ -11,6 +11,11 @@ export type Person = components['schemas']['Person'];
 export type FriendshipStatus = components['schemas']['FriendshipStatus'];
 export type Friend = components['schemas']['Friend'];
 export type FriendRequest = components['schemas']['FriendRequest'];
+export type Role = components['schemas']['Role'];
+export type MemberRole = components['schemas']['MemberRole'];
+export type CalendarSummary = components['schemas']['CalendarSummary'];
+export type Calendar = components['schemas']['Calendar'];
+export type CalendarMember = components['schemas']['CalendarMember'];
 
 /**
  * Base URL of the Go API. Set EXPO_PUBLIC_API_URL to change it; on a phone

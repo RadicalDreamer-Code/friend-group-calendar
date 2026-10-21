@@ -15,6 +15,7 @@ import (
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/blob"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/calendars"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
@@ -28,6 +29,7 @@ type Options struct {
 	Auth           *auth.Service
 	Users          *users.Service
 	Friends        *friends.Service
+	Calendars      *calendars.Service
 	Avatars        blob.Store
 	// PublicURL is the API's own address as clients see it, for avatar URLs.
 	PublicURL    string
@@ -39,6 +41,7 @@ type Server struct {
 	auth         *auth.Service
 	users        *users.Service
 	friends      *friends.Service
+	calendars    *calendars.Service
 	avatars      blob.Store
 	publicURL    string
 	cookieSecure bool
@@ -50,6 +53,7 @@ func NewRouter(o Options) (http.Handler, error) {
 		auth:         o.Auth,
 		users:        o.Users,
 		friends:      o.Friends,
+		calendars:    o.Calendars,
 		avatars:      o.Avatars,
 		publicURL:    o.PublicURL,
 		cookieSecure: o.CookieSecure,
@@ -114,6 +118,16 @@ func NewRouter(o Options) (http.Handler, error) {
 				r.Post("/friend-requests", s.handleSendFriendRequest)
 				r.Post("/friend-requests/{userID}/accept", s.handleAcceptFriendRequest)
 				r.Delete("/friend-requests/{userID}", s.handleDeleteFriendRequest)
+
+				r.Get("/calendars", s.handleListCalendars)
+				r.Post("/calendars", s.handleCreateCalendar)
+				r.Get("/calendars/{calendarID}", s.handleGetCalendar)
+				r.Patch("/calendars/{calendarID}", s.handleUpdateCalendar)
+				r.Delete("/calendars/{calendarID}", s.handleDeleteCalendar)
+				r.Post("/calendars/{calendarID}/members", s.handleInviteMember)
+				r.Patch("/calendars/{calendarID}/members/{userID}", s.handleUpdateMember)
+				r.Delete("/calendars/{calendarID}/members/{userID}", s.handleRemoveMember)
+				r.Post("/calendars/{calendarID}/transfer", s.handleTransferOwnership)
 			})
 		})
 	})
