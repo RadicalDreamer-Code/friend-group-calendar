@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/testutil"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
@@ -42,6 +43,7 @@ func newTestAPI(t *testing.T, configure ...func(*http.Server)) *testAPI {
 		AllowedOrigins: []string{webOrigin},
 		Auth:           auth.NewService(pool, a.mail, []byte(strings.Repeat("k", 32)), limits),
 		Users:          users.NewService(pool, a.blobs),
+		Friends:        friends.NewService(pool, friends.DefaultLimits),
 		Avatars:        a.blobs,
 		PublicURL:      "http://api.test",
 		// Go's cookie jar only sends Secure cookies over https.

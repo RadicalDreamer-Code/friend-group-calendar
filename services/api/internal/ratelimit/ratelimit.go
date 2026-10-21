@@ -6,11 +6,21 @@ package ratelimit
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// Error is returned when a caller has to wait before trying again.
+type Error struct {
+	RetryAfter time.Duration
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("rate limited, retry after %s", e.RetryAfter.Round(time.Second))
+}
 
 type Limiter struct {
 	// id orders limiters for locking in AllowAll.

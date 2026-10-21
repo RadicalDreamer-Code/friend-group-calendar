@@ -2,6 +2,7 @@ import { TabTrigger } from 'expo-router/ui';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useIncomingRequestCount } from '@/api/friends';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { hairline, layout, radius, space } from '@/theme/tokens';
 
@@ -12,6 +13,7 @@ import { appTabs } from './tabs';
 
 /** Sidebar navigation for tablet and desktop widths. */
 export function Sidebar() {
+  const requests = useIncomingRequestCount();
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -26,7 +28,7 @@ export function Sidebar() {
       <View role="tablist" aria-orientation="vertical" style={styles.items}>
         {appTabs.map((tab) => (
           <TabTrigger key={tab.name} name={tab.name} asChild>
-            <NavItem tab={tab} variant="sidebar" />
+            <NavItem tab={tab} variant="sidebar" badge={tab.name === 'friends' ? requests : 0} />
           </TabTrigger>
         ))}
       </View>

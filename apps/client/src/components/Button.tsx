@@ -11,9 +11,19 @@ type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   variant?: 'primary' | 'secondary' | 'plain';
   destructive?: boolean;
   loading?: boolean;
+  /** small: a compact pill for actions inside list rows. */
+  size?: 'regular' | 'small';
 };
 
-export function Button({ title, variant = 'primary', destructive, loading, disabled, ...props }: ButtonProps) {
+export function Button({
+  title,
+  variant = 'primary',
+  destructive,
+  loading,
+  disabled,
+  size = 'regular',
+  ...props
+}: ButtonProps) {
   const styles = useStyles();
   const { colors } = useTheme();
   const inactive = disabled || loading;
@@ -38,6 +48,7 @@ export function Button({ title, variant = 'primary', destructive, loading, disab
         variant === 'primary' && [styles.primary, destructive && styles.primaryDestructive],
         variant === 'secondary' && styles.secondary,
         variant === 'plain' && styles.plain,
+        size === 'small' && styles.small,
         pressed && styles.pressed,
         inactive && !loading && styles.disabled,
       ]}
@@ -45,7 +56,10 @@ export function Button({ title, variant = 'primary', destructive, loading, disab
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text variant="headline" style={{ color: textColor }}>
+        <Text
+          variant={size === 'small' ? 'subhead' : 'headline'}
+          style={[{ color: textColor }, size === 'small' && styles.smallText]}
+        >
           {title}
         </Text>
       )}
@@ -73,6 +87,14 @@ const useStyles = createStyles((c) => ({
   plain: {
     height: 44,
     paddingHorizontal: space.md,
+  },
+  small: {
+    height: 32,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+  },
+  smallText: {
+    fontWeight: '600',
   },
   pressed: {
     opacity: 0.7,

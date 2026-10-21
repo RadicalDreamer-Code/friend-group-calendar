@@ -41,7 +41,12 @@ export function useVerifyCode() {
       if (res.token) await saveToken(res.token);
       return res.user;
     },
-    onSuccess: (user) => queryClient.setQueryData(meQueryKey, user),
+    onSuccess: (user) => {
+      // A session that ended with a 401 (revoked or expired) leaves the
+      // previous user's friends and searches cached; never show them to this one.
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] });
+      queryClient.setQueryData(meQueryKey, user);
+    },
   });
 }
 

@@ -10,11 +10,13 @@ import { Text } from './Text';
 type ListSectionProps = {
   title?: string;
   footer?: string;
+  /** Left inset of the separators; lines them up with text after a leading avatar. */
+  separatorInset?: number;
   children: ReactNode;
 };
 
 /** An inset grouped list (like iOS Settings) with hairline separators between rows. */
-export function ListSection({ title, footer, children }: ListSectionProps) {
+export function ListSection({ title, footer, separatorInset, children }: ListSectionProps) {
   const styles = useStyles();
   const rows = Children.toArray(children);
   return (
@@ -27,7 +29,9 @@ export function ListSection({ title, footer, children }: ListSectionProps) {
       <View style={styles.group}>
         {rows.map((row, i) => (
           <Fragment key={i}>
-            {i > 0 ? <View style={styles.separator} /> : null}
+            {i > 0 ? (
+              <View style={[styles.separator, separatorInset !== undefined && { marginLeft: separatorInset }]} />
+            ) : null}
             {row}
           </Fragment>
         ))}
@@ -42,6 +46,8 @@ export function ListSection({ title, footer, children }: ListSectionProps) {
 }
 
 type ListRowProps = {
+  /** Shown before the label, e.g. an avatar. */
+  leading?: ReactNode;
   label?: string;
   /** Smaller second line under the label. */
   sublabel?: string;
@@ -57,18 +63,31 @@ type ListRowProps = {
   disabled?: boolean;
 };
 
-export function ListRow({ label, sublabel, detail, children, onPress, chevron, action, disabled }: ListRowProps) {
+export function ListRow({
+  leading,
+  label,
+  sublabel,
+  detail,
+  children,
+  onPress,
+  chevron,
+  action,
+  disabled,
+}: ListRowProps) {
   const styles = useStyles();
   const { colors } = useTheme();
   const tone = action === 'destructive' ? 'danger' : action === 'default' ? 'accent' : 'primary';
 
   const content = (
     <>
+      {leading}
       {label ? (
         <View style={styles.labels}>
-          <Text tone={tone}>{label}</Text>
+          <Text tone={tone} numberOfLines={1}>
+            {label}
+          </Text>
           {sublabel ? (
-            <Text variant="footnote" tone="secondary">
+            <Text variant="footnote" tone="secondary" numberOfLines={1}>
               {sublabel}
             </Text>
           ) : null}
