@@ -286,6 +286,8 @@ func writeCalendarError(w http.ResponseWriter, r *http.Request, err error) bool 
 		writeError(w, http.StatusConflict, "calendar_full", "A calendar can have at most 50 members.")
 	case errors.Is(err, calendars.ErrTooManyCalendars):
 		writeError(w, http.StatusConflict, "too_many_calendars", "You can own at most 50 calendars.")
+	case errors.Is(err, calendars.ErrNewOwnerHasTooMany):
+		writeError(w, http.StatusConflict, "new_owner_too_many_calendars", "They already own 50 calendars, the most anyone can own.")
 	default:
 		writeInternalError(w, r, err)
 	}

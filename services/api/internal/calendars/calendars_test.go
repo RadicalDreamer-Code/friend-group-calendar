@@ -464,4 +464,20 @@ func TestOwnedLimit(t *testing.T) {
 	if _, err := f.svc.Create(ctx, ada, "One more"); !errors.Is(err, ErrTooManyCalendars) {
 		t.Fatalf("over the limit: %v", err)
 	}
+
+	// Nor can someone at the limit be handed another one.
+	bob := f.user(t, "bob")
+	f.befriend(t, bob, ada)
+	cal := f.create(t, bob, "Bob's")
+	f.invite(t, cal, bob, ada, "")
+	if _, err := f.svc.TransferOwnership(ctx, cal.ID, bob, ada); !errors.Is(err, ErrNewOwnerHasTooMany) {
+		t.Fatalf("transfer over the limit: %v", err)
+	}
+	c, err := f.svc.Get(ctx, cal.ID, bob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Me.Role != RoleOwner {
+		t.Fatalf("failed transfer changed the owner: %+v", c.Me)
+	}
 }

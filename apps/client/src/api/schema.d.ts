@@ -442,7 +442,8 @@ export interface paths {
         /**
          * Make another member the owner (owner only)
          * @description The previous owner stays on as an editor who can invite.
-         *     Error codes: `forbidden`, `member_not_found`.
+         *     Error codes: `forbidden`, `member_not_found`,
+         *     `new_owner_too_many_calendars` (they already own 50).
          */
         post: operations["transferOwnership"];
         delete?: never;

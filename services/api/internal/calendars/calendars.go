@@ -55,6 +55,9 @@ var (
 	ErrOwnerMember      = errors.New("the owner's membership cannot be changed")
 	ErrCalendarFull     = fmt.Errorf("a calendar can have at most %d members", MaxMembers)
 	ErrTooManyCalendars = fmt.Errorf("you can own at most %d calendars", MaxOwned)
+	// ErrNewOwnerHasTooMany: the member a calendar is handed to already owns
+	// MaxOwned calendars.
+	ErrNewOwnerHasTooMany = fmt.Errorf("the new owner already owns %d calendars", MaxOwned)
 )
 
 type Role string
@@ -413,6 +416,18 @@ func (s *Service) TransferOwnership(ctx context.Context, calendarID, ownerID, ne
 		next, err := otherMember(ctx, q, cal.ID, newOwnerID)
 		if err != nil {
 			return err
+		}
+		// Locked like in Create, so receiving and creating calendars at the
+		// same time cannot pass the limit either.
+		if _, err := q.GetUserForUpdate(ctx, newOwnerID); err != nil {
+			return fmt.Errorf("lock new owner: %w", err)
+		}
+		owned, err := q.CountOwnedCalendars(ctx, newOwnerID)
+		if err != nil {
+			return fmt.Errorf("count calendars: %w", err)
+		}
+		if owned >= MaxOwned {
+			return ErrNewOwnerHasTooMany
 		}
 		// Demote first: the one-owner index is checked after each statement.
 		if _, err := q.UpdateCalendarMember(ctx, store.UpdateCalendarMemberParams{

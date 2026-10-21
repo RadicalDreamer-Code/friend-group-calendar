@@ -29,6 +29,12 @@ export function useCalendar(id: string) {
 }
 
 /**
+ * Changes to one calendar run one after another, so their answers cannot
+ * arrive out of order and put an older calendar into the cache.
+ */
+const calendarScope = (id: string) => ({ id: `calendar:${id}` });
+
+/**
  * Mutations that answer with the updated calendar put it straight into the
  * cache; the list is refetched because names, roles and members show there too.
  */
@@ -36,6 +42,7 @@ function useCalendarMutation<V>(id: string, mutationFn: (variables: V) => Promis
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
+    scope: calendarScope(id),
     onSuccess: (calendar) => queryClient.setQueryData(calendarQueryKey(id), calendar),
     onError: (error) => {
       if (isCalendarGone(error)) queryClient.invalidateQueries({ queryKey: calendarQueryKey(id) });
@@ -99,6 +106,7 @@ export function useRemoveMember(id: string) {
   return useMutation({
     mutationFn: (userId: string) =>
       unwrap(api.DELETE('/calendars/{calendarId}/members/{userId}', { params: { path: { calendarId: id, userId } } })),
+    scope: calendarScope(id),
     onSettled: () => queryClient.invalidateQueries({ queryKey: calendarsQueryKey }),
   });
 }
