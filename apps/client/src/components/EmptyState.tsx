@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
@@ -10,9 +11,11 @@ type EmptyStateProps = {
   icon: IconName;
   title: string;
   message: string;
+  /** A button below the message, e.g. to create the first item. */
+  action?: ReactNode;
 };
 
-export function EmptyState({ icon, title, message }: EmptyStateProps) {
+export function EmptyState({ icon, title, message, action }: EmptyStateProps) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (
@@ -26,6 +29,7 @@ export function EmptyState({ icon, title, message }: EmptyStateProps) {
       <Text variant="subhead" tone="secondary" style={styles.message}>
         {message}
       </Text>
+      {action ? <View style={styles.action}>{action}</View> : null}
     </View>
   );
 }
@@ -52,5 +56,8 @@ const useStyles = createStyles((c) => ({
   message: {
     textAlign: 'center',
     maxWidth: 300,
+  },
+  action: {
+    marginTop: space.xl,
   },
 }));

@@ -12,6 +12,7 @@ import (
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/blob"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/calendars"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/config"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/database"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
@@ -67,6 +68,7 @@ func run() error {
 		Auth:           authService,
 		Users:          users.NewService(pool, avatars),
 		Friends:        friends.NewService(pool, friends.DefaultLimits),
+		Calendars:      calendars.NewService(pool),
 		Avatars:        avatars,
 		PublicURL:      cfg.PublicURL,
 		CookieSecure:   cfg.CookieSecure,

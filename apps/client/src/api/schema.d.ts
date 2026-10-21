@@ -324,6 +324,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's calendars */
+        get: operations["listCalendars"];
+        put?: never;
+        /**
+         * Create a calendar owned by the caller
+         * @description Error codes: `invalid_name`, `too_many_calendars` (50 owned).
+         */
+        post: operations["createCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/{calendarId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A calendar with all its members
+         * @description `calendar_not_found` also when the caller is not a member.
+         */
+        get: operations["getCalendar"];
+        put?: never;
+        post?: never;
+        /** Delete the calendar for everyone (owner only) */
+        delete: operations["deleteCalendar"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename the calendar or change who may invite (owner only)
+         * @description Error codes: `invalid_name`, `forbidden`, `calendar_not_found`.
+         */
+        patch: operations["updateCalendar"];
+        trace?: never;
+    };
+    "/calendars/{calendarId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a friend to the calendar
+         * @description Open to the owner and to members who can invite. Only the caller's
+         *     friends can be invited; they join right away, as viewers unless a role
+         *     is given, and never with a higher role than the caller's.
+         *     Error codes: `forbidden` (no invite right), `not_friends`,
+         *     `user_not_found`, `already_member`, `invalid_role`, `role_too_high`,
+         *     `calendar_full` (50 members).
+         */
+        post: operations["inviteMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/{calendarId}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                /** @description The other user. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member (owner only), or leave with your own ID
+         * @description Anyone but the owner can leave. Error codes: `forbidden`,
+         *     `member_not_found`, `owner_must_transfer` (the owner tried to leave).
+         */
+        delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a member's role or invite right (owner only)
+         * @description Error codes: `forbidden`, `member_not_found`, `member_is_owner`, `invalid_role`.
+         */
+        patch: operations["updateMember"];
+        trace?: never;
+    };
+    "/calendars/{calendarId}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make another member the owner (owner only)
+         * @description The previous owner stays on as an editor who can invite.
+         *     Error codes: `forbidden`, `member_not_found`,
+         *     `new_owner_too_many_calendars` (they already own 50).
+         */
+        post: operations["transferOwnership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/avatars/{userId}/{file}": {
         parameters: {
             query?: never;
@@ -412,6 +540,52 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description Trimmed; 1–50 characters. */
+        CalendarName: string;
+        /**
+         * @description owner: one per calendar, manages it and its members. editor: adds and
+         *     edits entries. viewer: sees entries and answers them.
+         * @enum {string}
+         */
+        Role: "owner" | "editor" | "viewer";
+        /**
+         * @description A role that can be given to a member; ownership is transferred instead.
+         * @enum {string}
+         */
+        MemberRole: "editor" | "viewer";
+        CalendarSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            role: components["schemas"]["Role"];
+            /** @description Whether the caller may invite friends. */
+            canInvite: boolean;
+            memberCount: number;
+            /** @description The first 4 members, owner first. */
+            members: components["schemas"]["Person"][];
+        };
+        Calendar: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description Every member may invite, whatever their own invite right. */
+            membersCanInvite: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            role: components["schemas"]["Role"];
+            /** @description Whether the caller may invite friends. */
+            canInvite: boolean;
+            /** @description Owner first, then editors, then viewers, each by username. */
+            members: components["schemas"]["CalendarMember"][];
+        };
+        CalendarMember: {
+            user: components["schemas"]["Person"];
+            role: components["schemas"]["Role"];
+            /** @description The member's own invite right; always true for the owner. */
+            canInvite: boolean;
+            /** Format: date-time */
+            joinedAt: string;
+        };
     };
     responses: {
         /** @description Error */
@@ -436,6 +610,7 @@ export interface components {
         };
     };
     parameters: {
+        CalendarId: string;
         /** @description The other user. */
         UserId: string;
     };
@@ -926,6 +1101,270 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listCalendars: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Calendars the caller is a member of, by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        calendars: components["schemas"]["CalendarSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: components["schemas"]["CalendarName"];
+                };
+            };
+        };
+        responses: {
+            /** @description The new calendar */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    getCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The calendar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: components["schemas"]["CalendarName"];
+                    /** @description Lets every member invite friends. */
+                    membersCanInvite?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The updated calendar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    inviteMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                    role?: components["schemas"]["MemberRole"];
+                };
+            };
+        };
+        responses: {
+            /** @description The calendar with the new member */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                /** @description The other user. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    updateMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                /** @description The other user. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    role?: components["schemas"]["MemberRole"];
+                    canInvite?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The updated calendar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    transferOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The calendar afterwards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];

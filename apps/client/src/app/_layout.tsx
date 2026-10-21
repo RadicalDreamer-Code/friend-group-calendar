@@ -63,6 +63,7 @@ function RootNavigator() {
         <Stack.Protected guard={status === 'signedIn'}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="edit-username" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="new-calendar" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={status === 'needsUsername'}>
           <Stack.Screen name="welcome" />

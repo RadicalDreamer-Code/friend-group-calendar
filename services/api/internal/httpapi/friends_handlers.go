@@ -18,12 +18,16 @@ type personResponse struct {
 	AvatarURL *string   `json:"avatarUrl"`
 }
 
+func (s *Server) person(id uuid.UUID, username string, avatarKey *string) personResponse {
+	return personResponse{ID: id, Username: username, AvatarURL: s.avatarURL(avatarKey)}
+}
+
 func (s *Server) personResponse(p friends.Person) personResponse {
-	return personResponse{ID: p.ID, Username: p.Username, AvatarURL: s.avatarURL(p.AvatarKey)}
+	return s.person(p.ID, p.Username, p.AvatarKey)
 }
 
 // requireUsername keeps users who have not picked a username yet out of the
-// friends features: nobody could tell who a request came from.
+// friends and calendar features: nobody could tell who someone is.
 func requireUsername(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if mustPrincipal(r.Context()).User.Username == nil {

@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, type ReactNode } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -12,13 +12,18 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { createStyles } from '@/theme/ThemeProvider';
+import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { hairline, layout, motion, space } from '@/theme/tokens';
 
+import { Icon } from './Icon';
 import { Text } from './Text';
 
 type PageProps = {
   title: string;
+  /** A back button above the title, for screens pushed onto a stack. */
+  back?: { label: string; onPress: () => void };
+  /** Shown next to the large title, e.g. a button that adds something. */
+  action?: ReactNode;
   children: ReactNode;
 };
 
@@ -29,8 +34,9 @@ const COMPACT_HEADER_HEIGHT = 44;
  * scrolls away, a compact title with a hairline fades in at the top.
  * Content eases in each time the screen gains focus.
  */
-export function Page({ title, children }: PageProps) {
+export function Page({ title, back, action, children }: PageProps) {
   const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= layout.wideBreakpoint;
@@ -81,9 +87,25 @@ export function Page({ title, children }: PageProps) {
         ]}
       >
         <Animated.View style={[styles.inner, entranceStyle]}>
-          <Text variant="largeTitle" role="heading" aria-level={1} style={styles.title}>
-            {title}
-          </Text>
+          {back ? (
+            <Pressable
+              role="link"
+              onPress={back.onPress}
+              hitSlop={8}
+              style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
+            >
+              <Icon name="chevron-back" size={20} color={colors.accent} />
+              <Text tone="accent" numberOfLines={1}>
+                {back.label}
+              </Text>
+            </Pressable>
+          ) : null}
+          <View style={styles.titleRow}>
+            <Text variant="largeTitle" role="heading" aria-level={1} style={styles.title}>
+              {title}
+            </Text>
+            {action}
+          </View>
           {children}
         </Animated.View>
       </Animated.ScrollView>
@@ -116,7 +138,25 @@ const useStyles = createStyles((c) => ({
     maxWidth: layout.contentMaxWidth,
     alignSelf: 'center',
   },
-  title: {
+  back: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: space.xxs,
+    // Lines the chevron up with the title below.
+    marginLeft: -space.xs,
     marginBottom: space.sm,
+  },
+  backPressed: {
+    opacity: 0.6,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginBottom: space.sm,
+  },
+  title: {
+    flex: 1,
   },
 }));

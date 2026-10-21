@@ -10,6 +10,23 @@ import (
 	"github.com/google/uuid"
 )
 
+type Calendar struct {
+	ID               uuid.UUID `json:"id"`
+	Name             string    `json:"name"`
+	MembersCanInvite bool      `json:"members_can_invite"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type CalendarMember struct {
+	CalendarID uuid.UUID  `json:"calendar_id"`
+	UserID     uuid.UUID  `json:"user_id"`
+	Role       string     `json:"role"`
+	CanInvite  bool       `json:"can_invite"`
+	InvitedBy  *uuid.UUID `json:"invited_by"`
+	JoinedAt   time.Time  `json:"joined_at"`
+}
+
 type Friendship struct {
 	RequesterID uuid.UUID  `json:"requester_id"`
 	AddresseeID uuid.UUID  `json:"addressee_id"`
