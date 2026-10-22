@@ -20,12 +20,17 @@ import { Icon } from '@/components/Icon';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import { Page } from '@/components/Page';
+import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { TextField } from '@/components/TextField';
 import { confirm } from '@/lib/confirm';
 import { formatDay, isISODate, monthOf, today } from '@/lib/dates';
+import { haptics } from '@/lib/haptics';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { entryColors, radius, space } from '@/theme/tokens';
+import { entryColors, entryInk, radius, space } from '@/theme/tokens';
+
+export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 const colorNames: Record<EntryColor, string> = {
   fjord: 'Fjord blue',
@@ -48,26 +53,25 @@ export default function EditEntryScreen() {
   const { calendarId, entryId, date } = useLocalSearchParams<{ calendarId: string; entryId?: string; date?: string }>();
   const title = entryId ? 'Edit entry' : 'New entry';
   const calendar = useCalendar(calendarId);
+  useEscapeKey(close);
 
   if (calendar.isPending) {
     return (
-      <Page title={title}>
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
+      <Page title={title} sheet>
+        <SkeletonList rows={3} />
       </Page>
     );
   }
-  if (calendar.isError) {
+  if (calendar.data === undefined) {
     return (
-      <Page title={title}>
-        <CalendarError error={calendar.error} onRetry={() => calendar.refetch()} />
+      <Page title={title} sheet>
+        <CalendarError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
       </Page>
     );
   }
   if (!canEditEntries(calendar.data.role)) {
     return (
-      <Page title={title}>
+      <Page title={title} sheet>
         <EmptyState
           icon="lock-closed-outline"
           title="Only editors can do this"
@@ -79,7 +83,7 @@ export default function EditEntryScreen() {
   }
   if (entryId) return <EditExisting calendarId={calendarId} entryId={entryId} />;
   return (
-    <Page title={title}>
+    <Page title={title} sheet>
       <EntryForm
         calendarId={calendarId}
         initial={{ title: '', date: isISODate(date) ? date : today(), color: 'fjord' }}
@@ -92,16 +96,14 @@ function EditExisting({ calendarId, entryId }: { calendarId: string; entryId: st
   const entry = useEntry(calendarId, entryId);
   if (entry.isPending) {
     return (
-      <Page title="Edit entry">
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
+      <Page title="Edit entry" sheet>
+        <SkeletonList rows={3} />
       </Page>
     );
   }
   if (entry.isError) {
     return (
-      <Page title="Edit entry">
+      <Page title="Edit entry" sheet>
         {isEntryGone(entry.error) ? (
           <EmptyState
             icon="calendar-clear-outline"
@@ -110,13 +112,13 @@ function EditExisting({ calendarId, entryId }: { calendarId: string; entryId: st
             action={<Button variant="secondary" title="Close" onPress={close} />}
           />
         ) : (
-          <CalendarError error={entry.error} onRetry={() => entry.refetch()} />
+          <CalendarError error={entry.error} onRetry={entry.refetch} retrying={entry.isFetching} />
         )}
       </Page>
     );
   }
   return (
-    <Page title="Edit entry">
+    <Page title="Edit entry" sheet>
       <EntryForm calendarId={calendarId} entry={entry.data} initial={entry.data} />
     </Page>
   );
@@ -155,10 +157,11 @@ function EntryForm({
     if (color !== original.color) changes.color = color;
     const options = {
       // Back to the calendar on the entry's day, or to the entry itself.
-      onSuccess: (saved: Entry) =>
-        entry
-          ? close()
-          : router.dismissTo({ pathname: '/calendars/[id]', params: { id: calendarId, day: saved.date } }),
+      onSuccess: (saved: Entry) => {
+        haptics.success();
+        if (entry) close();
+        else router.dismissTo({ pathname: '/calendars/[id]', params: { id: calendarId, day: saved.date } });
+      },
     };
     if (entry) update.mutate(changes, options);
     else create.mutate(body, options);
@@ -250,12 +253,15 @@ function ColorPicker({ value, onChange }: { value: EntryColor; onChange: (color:
             role="radio"
             aria-checked={selected}
             aria-label={colorNames[c.id]}
-            onPress={() => onChange(c.id)}
+            onPress={() => {
+              if (c.id !== value) haptics.selection();
+              onChange(c.id);
+            }}
             hitSlop={4}
             style={[styles.colorRing, selected && { borderColor: colors.text }]}
           >
             <View style={[styles.color, { backgroundColor: c.value }]}>
-              {selected ? <Icon name="checkmark" size={18} color="#FFFFFF" /> : null}
+              {selected ? <Icon name="checkmark" size={18} color={entryInk} /> : null}
             </View>
           </Pressable>
         );

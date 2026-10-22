@@ -33,6 +33,13 @@ function injectBaseStyles() {
   style.textContent = `
     html, body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
     body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+    /* Keyboard focus. Text fields show focus with their border instead, without the browser's outline. */
+    input, textarea { outline-style: none; }
+    [tabindex]:focus-visible, a:focus-visible, button:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    [data-inset-focus] [tabindex]:focus-visible { outline-offset: -2px; }
     ::view-transition-old(root), ::view-transition-new(root) {
       animation-duration: ${motion.duration.slow}ms;
       animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
@@ -46,6 +53,7 @@ export function applyDocumentTheme(scheme: ColorScheme, colors: Colors) {
   injectBaseStyles();
   const root = document.documentElement;
   root.style.colorScheme = scheme;
+  root.style.setProperty('--focus-ring', colors.accent);
   root.style.backgroundColor = colors.background;
   document.body.style.backgroundColor = colors.background;
 

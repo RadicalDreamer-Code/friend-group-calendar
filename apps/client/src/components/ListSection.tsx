@@ -1,11 +1,16 @@
 import { Children, Fragment, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { hairline, radius, space } from '@/theme/tokens';
 
 import { Icon } from './Icon';
 import { Text } from './Text';
+
+// The group clips its rows to the rounded corners, which would also clip a
+// focus ring drawn outside a row; web CSS draws it inside for these (see platform.web.ts).
+// react-native-web turns `dataSet` into data-* attributes.
+const insetFocus = Platform.OS === 'web' ? ({ dataSet: { insetFocus: 'true' } } as object) : {};
 
 type ListSectionProps = {
   title?: string;
@@ -22,11 +27,11 @@ export function ListSection({ title, footer, separatorInset, children }: ListSec
   return (
     <View style={styles.root}>
       {title ? (
-        <Text variant="footnote" tone="secondary" style={styles.title}>
+        <Text variant="footnote" tone="secondary" role="heading" aria-level={2} style={styles.title}>
           {title}
         </Text>
       ) : null}
-      <View style={styles.group}>
+      <View style={styles.group} {...insetFocus}>
         {rows.map((row, i) => (
           <Fragment key={i}>
             {i > 0 ? (

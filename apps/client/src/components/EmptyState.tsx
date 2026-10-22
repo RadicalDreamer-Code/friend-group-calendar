@@ -13,15 +13,20 @@ type EmptyStateProps = {
   message: string;
   /** A button below the message, e.g. to create the first item. */
   action?: ReactNode;
+  /** Less padding, for a state inside a screen rather than filling it. */
+  compact?: boolean;
+  /** danger: for errors; the badge turns red and screen readers announce it. */
+  tone?: 'default' | 'danger';
 };
 
-export function EmptyState({ icon, title, message, action }: EmptyStateProps) {
+export function EmptyState({ icon, title, message, action, compact, tone = 'default' }: EmptyStateProps) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const danger = tone === 'danger';
   return (
-    <View style={styles.root}>
-      <View style={styles.badge}>
-        <Icon name={icon} size={26} color={colors.accent} />
+    <View style={[styles.root, compact && styles.rootCompact]} role={danger ? 'alert' : undefined}>
+      <View style={[styles.badge, danger && styles.badgeDanger]}>
+        <Icon name={icon} size={26} color={danger ? colors.danger : colors.accent} />
       </View>
       <Text variant="headline" style={styles.title}>
         {title}
@@ -40,6 +45,9 @@ const useStyles = createStyles((c) => ({
     paddingVertical: space.xxxl * 1.5,
     paddingHorizontal: space.xl,
   },
+  rootCompact: {
+    paddingVertical: space.xxl,
+  },
   badge: {
     width: 56,
     height: 56,
@@ -48,6 +56,9 @@ const useStyles = createStyles((c) => ({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: space.lg,
+  },
+  badgeDanger: {
+    backgroundColor: c.fill,
   },
   title: {
     textAlign: 'center',

@@ -39,6 +39,8 @@ export function Button({
   return (
     <Pressable
       role="button"
+      // The title is replaced by a spinner while loading; the name stays.
+      aria-label={title}
       aria-disabled={inactive}
       aria-busy={loading}
       disabled={inactive}

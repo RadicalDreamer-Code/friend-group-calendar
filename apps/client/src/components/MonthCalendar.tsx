@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { PanResponder, Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -14,6 +14,7 @@ import {
   today as getToday,
   weekdayNames,
 } from '@/lib/dates';
+import { haptics } from '@/lib/haptics';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { motion, radius, space } from '@/theme/tokens';
 
@@ -51,12 +52,18 @@ export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, 
 
   // Kept in a ref so the pan responder, created once, sees the current month.
   const go = useRef((_n: number) => {});
-  go.current = (n: number) => {
-    const next = addMonths(month, n);
-    if (next >= firstMonth && next <= lastMonth) onMonthChange(next);
-  };
+  useLayoutEffect(() => {
+    go.current = (n: number) => {
+      const next = addMonths(month, n);
+      if (next < firstMonth || next > lastMonth) return;
+      haptics.selection();
+      onMonthChange(next);
+    };
+  });
   const pan = useMemo(
     () =>
+      // The handlers only read `go` during a gesture, never while rendering.
+      // eslint-disable-next-line react-hooks/refs
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
         onPanResponderRelease: (_, g) => {
@@ -206,7 +213,10 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, co
       role="button"
       aria-label={label}
       aria-selected={isSelected}
-      onPress={() => onSelect(date)}
+      onPress={() => {
+        if (!isSelected) haptics.selection();
+        onSelect(date);
+      }}
       style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
         styles.cell,
         compact && styles.cellCompact,

@@ -1,5 +1,7 @@
 import { Alert } from 'react-native';
 
+import { haptics } from './haptics';
+
 type ConfirmOptions = {
   title: string;
   message?: string;
@@ -9,6 +11,7 @@ type ConfirmOptions = {
 
 /** Native: a system alert with Cancel and the confirm action. */
 export function confirm({ title, message, confirmLabel, destructive }: ConfirmOptions): Promise<boolean> {
+  if (destructive) haptics.warning();
   return new Promise((resolve) => {
     Alert.alert(title, message, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },

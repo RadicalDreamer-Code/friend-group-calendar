@@ -9,9 +9,11 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { backTo } from '@/lib/navigation';
 import { createStyles } from '@/theme/ThemeProvider';
@@ -36,11 +38,9 @@ export default function InviteScreen() {
   return (
     <Page title="Invite friends" back={back}>
       {calendar.isPending ? (
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
-      ) : calendar.isError ? (
-        <CalendarError error={calendar.error} onRetry={() => calendar.refetch()} />
+        <SkeletonList rows={3} leading="avatar" separatorInset={SEPARATOR_INSET} />
+      ) : calendar.data === undefined ? (
+        <CalendarError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
       ) : calendar.data.canInvite ? (
         <InviteFriends calendar={calendar.data} />
       ) : (
@@ -64,21 +64,10 @@ function InviteFriends({ calendar }: { calendar: Calendar }) {
   const members = new Set(calendar.members.map((m) => m.user.id));
 
   if (friends.isPending) {
-    return (
-      <ListSection>
-        <ListRow label="Loading…" />
-      </ListSection>
-    );
+    return <SkeletonList title="Friends" rows={3} leading="avatar" separatorInset={SEPARATOR_INSET} />;
   }
-  if (friends.isError) {
-    return (
-      <View style={styles.error}>
-        <Text tone="secondary" style={styles.center}>
-          {errorMessage(friends.error)}
-        </Text>
-        <Button variant="secondary" title="Try again" onPress={() => friends.refetch()} />
-      </View>
-    );
+  if (friends.data === undefined) {
+    return <ErrorState error={friends.error} onRetry={friends.refetch} retrying={friends.isFetching} />;
   }
   const list = friends.data.friends;
   if (list.length === 0) {
@@ -153,13 +142,5 @@ const useStyles = createStyles(() => ({
   },
   fill: {
     flex: 1,
-  },
-  error: {
-    alignItems: 'center',
-    gap: space.lg,
-    paddingVertical: space.xxxl,
-  },
-  center: {
-    textAlign: 'center',
   },
 }));

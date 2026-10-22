@@ -28,6 +28,8 @@ export function NavItem({
   const styles = useStyles();
   const { colors } = useTheme();
   const tint = isFocused ? colors.accent : variant === 'bar' ? colors.textTertiary : colors.textSecondary;
+  // Accent text on the pale sidebar selection is too faint to read, so only the icon is tinted there.
+  const labelColor = variant === 'sidebar' && isFocused ? colors.text : tint;
 
   const pressableStyle = ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
     variant === 'bar' ? styles.bar : styles.sidebar,
@@ -53,7 +55,7 @@ export function NavItem({
       <Text
         variant={variant === 'bar' ? 'caption' : 'callout'}
         style={[
-          { color: tint },
+          { color: labelColor },
           variant === 'sidebar' && styles.sidebarLabel,
           variant === 'sidebar' && isFocused && styles.sidebarLabelFocused,
         ]}

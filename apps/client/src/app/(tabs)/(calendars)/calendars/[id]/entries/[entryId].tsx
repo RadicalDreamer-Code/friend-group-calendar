@@ -9,12 +9,15 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
 import { EmptyState } from '@/components/EmptyState';
+import { RefreshError } from '@/components/ErrorState';
 import { Icon, type IconName } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
+import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { relativeDay } from '@/lib/dates';
+import { haptics } from '@/lib/haptics';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { backTo } from '@/lib/navigation';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
@@ -34,21 +37,13 @@ export default function EntryScreen() {
     onPress: () => backTo({ pathname: '/calendars/[id]', params: entry.data ? { id, day: entry.data.date } : { id } }),
   };
 
-  if (calendar.isError || (entry.isError && !isEntryGone(entry.error))) {
-    const error = calendar.error ?? entry.error;
-    return (
-      <Page title="Entry" back={back}>
-        <CalendarError
-          error={error}
-          onRetry={() => {
-            if (calendar.isError) calendar.refetch();
-            if (entry.isError) entry.refetch();
-          }}
-        />
-      </Page>
-    );
-  }
-  if (entry.isError) {
+  const retry = () => {
+    if (calendar.isError) calendar.refetch();
+    if (entry.isError) entry.refetch();
+  };
+  const retrying = calendar.isFetching || entry.isFetching;
+
+  if (entry.isError && isEntryGone(entry.error)) {
     return (
       <Page title="Entry" back={back}>
         <EmptyState
@@ -62,12 +57,17 @@ export default function EntryScreen() {
       </Page>
     );
   }
-  if (calendar.isPending || entry.isPending) {
+  if ((calendar.isError && !calendar.data) || (entry.isError && !entry.data)) {
     return (
       <Page title="Entry" back={back}>
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
+        <CalendarError error={calendar.error ?? entry.error} onRetry={retry} retrying={retrying} />
+      </Page>
+    );
+  }
+  if (!calendar.data || !entry.data) {
+    return (
+      <Page title="Entry" back={back}>
+        <SkeletonList title="Going" rows={2} leading="avatar" separatorInset={SEPARATOR_INSET} />
       </Page>
     );
   }
@@ -87,6 +87,9 @@ export default function EntryScreen() {
         ) : null
       }
     >
+      {calendar.isRefetchError || entry.isRefetchError ? (
+        <RefreshError error={calendar.error ?? entry.error} onRetry={retry} retrying={retrying} />
+      ) : null}
       <Details calendar={calendar.data} entry={entry.data} />
     </Page>
   );
@@ -106,7 +109,10 @@ function Details({ calendar, entry }: { calendar: Calendar; entry: Entry }) {
   const waiting = calendar.members.filter((m) => !answered.has(m.user.id));
 
   // Tapping your current answer again takes it back.
-  const answer = (reply: Exclude<Reply, null>) => respond.mutate(mine === reply ? null : reply);
+  const answer = (reply: Exclude<Reply, null>) => {
+    haptics.selection();
+    respond.mutate(mine === reply ? null : reply);
+  };
 
   return (
     <>

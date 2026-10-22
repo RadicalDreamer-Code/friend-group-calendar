@@ -1,5 +1,6 @@
 import { Platform, Switch as RNSwitch, type SwitchProps as RNSwitchProps } from 'react-native';
 
+import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 
 type SwitchProps = Omit<RNSwitchProps, 'trackColor' | 'thumbColor'> & {
@@ -13,16 +14,21 @@ const THUMB = '#FFFFFF';
 const webThumb = Platform.OS === 'web' ? ({ activeThumbColor: THUMB } as object) : {};
 
 /** The platform switch in the accent color. */
-export function Switch({ label, ...props }: SwitchProps) {
+export function Switch({ label, onValueChange, ...props }: SwitchProps) {
   const { colors } = useTheme();
   return (
     <RNSwitch
       aria-label={label}
-      trackColor={{ false: colors.fill, true: colors.accent }}
+      // The off track needs 3:1 against the row to be seen at all; the pale fill was close to invisible.
+      trackColor={{ false: colors.textTertiary, true: colors.accent }}
       thumbColor={THUMB}
-      ios_backgroundColor={colors.fill}
+      ios_backgroundColor={colors.textTertiary}
       {...webThumb}
       {...props}
+      onValueChange={(value) => {
+        haptics.selection();
+        onValueChange?.(value);
+      }}
     />
   );
 }

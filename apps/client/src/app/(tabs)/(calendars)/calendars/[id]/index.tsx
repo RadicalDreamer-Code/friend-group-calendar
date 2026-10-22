@@ -3,15 +3,16 @@ import { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { canEditEntries, useCalendar } from '@/api/calendars';
-import { errorMessage, type Calendar, type Entry } from '@/api/client';
+import { type Calendar, type Entry } from '@/api/client';
 import { replyOf, useMonthEntries } from '@/api/entries';
 import { useUser } from '@/auth/session';
-import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
+import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import { Page } from '@/components/Page';
+import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { isISODate, monthOf, relativeDay, today } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
@@ -31,28 +32,29 @@ export default function MonthScreen() {
   if (calendar.isPending) {
     return (
       <Page title="Calendar" back={back}>
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
+        <SkeletonList rows={4} />
       </Page>
     );
   }
-  if (calendar.isError) {
+  if (calendar.data === undefined) {
     return (
       <Page title="Calendar" back={back}>
-        <CalendarError error={calendar.error} onRetry={() => calendar.refetch()} />
+        <CalendarError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
       </Page>
     );
   }
-  return <Month calendar={calendar.data} selected={selected} back={back} />;
+  return <Month calendar={calendar.data} calendarQuery={calendar} selected={selected} back={back} />;
 }
 
 function Month({
   calendar,
+  calendarQuery,
   selected,
   back,
 }: {
   calendar: Calendar;
+  /** For refresh errors; the calendar was loaded before. */
+  calendarQuery: ReturnType<typeof useCalendar>;
   selected: string;
   back: { label: string; onPress: () => void };
 }) {
@@ -73,6 +75,17 @@ function Month({
     return byDay;
   }, [entries.data]);
 
+  // The month grid stays usable with what was loaded before; only a first load that fails replaces the day list.
+  const refreshError = calendarQuery.isRefetchError
+    ? calendarQuery.error
+    : entries.isRefetchError
+      ? entries.error
+      : null;
+  const retryRefresh = () => {
+    if (calendarQuery.isError) calendarQuery.refetch();
+    if (entries.isError) entries.refetch();
+  };
+
   return (
     <Page
       title={calendar.name}
@@ -88,6 +101,13 @@ function Month({
         </View>
       }
     >
+      {refreshError ? (
+        <RefreshError
+          error={refreshError}
+          onRetry={retryRefresh}
+          retrying={calendarQuery.isFetching || entries.isFetching}
+        />
+      ) : null}
       <View style={styles.calendar}>
         <MonthCalendar month={month} onMonthChange={changeMonth} selected={selected} onSelect={select} dots={dots} />
       </View>
@@ -96,7 +116,8 @@ function Month({
         date={selected}
         entries={entries.data?.filter((e) => e.date === selected)}
         error={entries.isError ? entries.error : null}
-        onRetry={() => entries.refetch()}
+        onRetry={entries.refetch}
+        retrying={entries.isFetching}
         onAdd={canEdit ? addEntry : undefined}
       />
     </Page>
@@ -109,6 +130,7 @@ function DayEntries({
   entries,
   error,
   onRetry,
+  retrying,
   onAdd,
 }: {
   calendar: Calendar;
@@ -116,29 +138,15 @@ function DayEntries({
   entries: Entry[] | undefined;
   error: unknown;
   onRetry: () => void;
+  retrying: boolean;
   onAdd?: () => void;
 }) {
   const styles = useStyles();
   const me = useUser();
   const title = relativeDay(date);
 
-  if (error && !entries) {
-    return (
-      <View style={styles.error}>
-        <Text tone="secondary" style={styles.errorText}>
-          {errorMessage(error)}
-        </Text>
-        <Button variant="secondary" title="Try again" onPress={onRetry} />
-      </View>
-    );
-  }
-  if (!entries) {
-    return (
-      <ListSection title={title}>
-        <ListRow label="Loading…" />
-      </ListSection>
-    );
-  }
+  if (error && !entries) return <ErrorState compact error={error} onRetry={onRetry} retrying={retrying} />;
+  if (!entries) return <SkeletonList title={title} rows={1} leading="swatch" sublabel />;
   return (
     <ListSection title={title} separatorInset={SEPARATOR_INSET}>
       {entries.length === 0 ? (
@@ -198,13 +206,5 @@ const useStyles = createStyles(() => ({
   },
   nothing: {
     flex: 1,
-  },
-  error: {
-    alignItems: 'center',
-    gap: space.lg,
-    paddingVertical: space.xxl,
-  },
-  errorText: {
-    textAlign: 'center',
   },
 }));

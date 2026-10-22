@@ -13,9 +13,11 @@ import { errorMessage, type Calendar, type CalendarMember, type MemberRole } fro
 import { Avatar } from '@/components/Avatar';
 import { CalendarError } from '@/components/CalendarError';
 import { EmptyState } from '@/components/EmptyState';
+import { RefreshError } from '@/components/ErrorState';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { SkeletonList } from '@/components/Skeleton';
 import { Switch } from '@/components/Switch';
 import { Text } from '@/components/Text';
 import { confirm } from '@/lib/confirm';
@@ -41,16 +43,14 @@ export default function MemberScreen() {
   if (calendar.isPending) {
     return (
       <Page title="Member" back={back}>
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
+        <SkeletonList rows={2} />
       </Page>
     );
   }
-  if (calendar.isError) {
+  if (calendar.data === undefined) {
     return (
       <Page title="Member" back={back}>
-        <CalendarError error={calendar.error} onRetry={() => calendar.refetch()} />
+        <CalendarError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
       </Page>
     );
   }
@@ -64,6 +64,9 @@ export default function MemberScreen() {
   }
   return (
     <Page title={`@${member.user.username}`} back={back}>
+      {calendar.isRefetchError ? (
+        <RefreshError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
+      ) : null}
       <MemberDetails calendar={calendar.data} member={member} onDone={back.onPress} />
     </Page>
   );
