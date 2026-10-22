@@ -57,11 +57,15 @@ export function applyDocumentTheme(scheme: ColorScheme, colors: Colors) {
   root.style.backgroundColor = colors.background;
   document.body.style.backgroundColor = colors.background;
 
-  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (!meta) {
-    meta = document.createElement('meta');
+  // index.html has one per device theme; the theme picked in the app wins over both.
+  const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+  if (metas.length === 0) {
+    const meta = document.createElement('meta');
     meta.name = 'theme-color';
+    meta.content = colors.background;
     document.head.appendChild(meta);
   }
-  meta.content = colors.background;
+  metas.forEach((meta) => {
+    meta.content = colors.background;
+  });
 }
