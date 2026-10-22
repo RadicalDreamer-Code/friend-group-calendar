@@ -34,6 +34,7 @@ make logs        # follow logs
 make down        # stop (data is kept)
 make test        # go vet + go test (incl. database tests) in the api container
 make typecheck   # TypeScript check in the web container
+make lint        # ESLint, Prettier and the color contrast check for the client
 make gen-api     # regenerate the typed API client after editing the OpenAPI spec
 make gen-sql     # regenerate the Go database code after editing SQL queries
 make psql        # SQL shell
@@ -53,6 +54,15 @@ npm install
 EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:8080 npx expo start
 ```
 
+CI (GitHub Actions) runs the same checks on every push and pull request, plus `gofmt`, the
+race detector and a build of both production images.
+
+## Production
+
+`deploy/` has everything for one server: a Compose file with Caddy (automatic HTTPS, serving
+the web app at `app.DOMAIN` and proxying `api.DOMAIN`), the API, Postgres and a daily
+`pg_dump`. Setup, updates and restoring a backup are in [deploy/README.md](deploy/README.md).
+
 ## Layout
 
 ```
@@ -67,6 +77,7 @@ services/api     Go API: chi, pgx, goose migrations (embedded, run on startup), 
   internal/friends  friend requests, friendships, username search
   internal/calendars  calendars, members, roles, entries, answers and who may do what
 packages/api     openapi.yaml, the contract between client and API
+deploy           production Compose file, Caddyfile, backup script
 ```
 
 ## Sign-in
@@ -80,7 +91,8 @@ email and IP. Avatars are cropped to 512 px WebP, stored in S3-compatible storag
 served by the API.
 
 Production needs its own `AUTH_SECRET` (`openssl rand -hex 32`), an SMTP provider
-(`SMTP_*`, `MAIL_FROM`; Resend and Postmark both offer SMTP) and a bucket (`S3_*`).
+(`SMTP_*`, `MAIL_FROM`; Resend and Postmark both offer SMTP) and a bucket (`S3_*`);
+`deploy/.env.example` explains each setting.
 
 ## Friends
 
@@ -127,7 +139,13 @@ Minimal, Apple HIG-inspired: whitespace, hairlines, the system font and one acce
 - Accent "Fjord": `#2E78A6` light / `#63AEDB` dark, on warm neutrals (`#FAF9F7` / `#1A1918`)
 - Theme: System, Light or Dark, saved per device; on web the switch crossfades via the View Transitions API
 - Navigation: bottom tab bar on phones, sidebar from 768px
-- All values live in `apps/client/src/theme/tokens.ts`
+- All values live in `apps/client/src/theme/tokens.ts`; colors in `colors.ts`, where every
+  text and background pair has to pass WCAG AA (`npm run check:contrast`)
+- Loading shows skeleton rows, failures a way to try again; data loaded before stays on
+  screen when a refresh fails
+- Motion is short and calm, and off for people who prefer reduced motion; haptics on iOS and Android
+- Installable as a web app (manifest and icons in `apps/client/public`; icon sources in
+  `apps/client/assets/source`, rendered by `assets/source/render.sh`)
 
 ## Roadmap
 
@@ -138,4 +156,4 @@ Tracked on the Trello board "Event Planner".
 3. Friends: requests and list ✅
 4. Calendars, members, roles and invite rights ✅
 5. Entries, month view, accept / decline ✅
-6. Polish, PWA, CI, production deployment
+6. Polish, PWA, CI, production deployment ✅
