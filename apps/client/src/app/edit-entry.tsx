@@ -4,7 +4,15 @@ import { Pressable, View } from 'react-native';
 
 import { canEditEntries, useCalendar } from '@/api/calendars';
 import { errorMessage, type Entry, type EntryColor } from '@/api/client';
-import { entryTitleMaxLength, useCreateEntry, useDeleteEntry, useEntry, useUpdateEntry } from '@/api/entries';
+import {
+  entryTitleMaxLength,
+  isEntryGone,
+  useCreateEntry,
+  useDeleteEntry,
+  useEntry,
+  useUpdateEntry,
+  type EntryFields,
+} from '@/api/entries';
 import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
 import { EmptyState } from '@/components/EmptyState';
@@ -15,7 +23,7 @@ import { Page } from '@/components/Page';
 import { Text } from '@/components/Text';
 import { TextField } from '@/components/TextField';
 import { confirm } from '@/lib/confirm';
-import { formatDay, monthOf, today } from '@/lib/dates';
+import { formatDay, isISODate, monthOf, today } from '@/lib/dates';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { entryColors, radius, space } from '@/theme/tokens';
 
@@ -72,7 +80,10 @@ export default function EditEntryScreen() {
   if (entryId) return <EditExisting calendarId={calendarId} entryId={entryId} />;
   return (
     <Page title={title}>
-      <EntryForm calendarId={calendarId} initial={{ title: '', date: date ?? today(), color: 'fjord' }} />
+      <EntryForm
+        calendarId={calendarId}
+        initial={{ title: '', date: isISODate(date) ? date : today(), color: 'fjord' }}
+      />
     </Page>
   );
 }
@@ -91,7 +102,16 @@ function EditExisting({ calendarId, entryId }: { calendarId: string; entryId: st
   if (entry.isError) {
     return (
       <Page title="Edit entry">
-        <CalendarError error={entry.error} onRetry={() => entry.refetch()} />
+        {isEntryGone(entry.error) ? (
+          <EmptyState
+            icon="calendar-clear-outline"
+            title="Entry deleted"
+            message="Someone removed it from the calendar."
+            action={<Button variant="secondary" title="Close" onPress={close} />}
+          />
+        ) : (
+          <CalendarError error={entry.error} onRetry={() => entry.refetch()} />
+        )}
       </Page>
     );
   }
@@ -112,6 +132,8 @@ function EntryForm({
   initial: { title: string; date: string; color: EntryColor };
 }) {
   const styles = useStyles();
+  // What the form opened with; `initial` follows the polled entry.
+  const [original] = useState(initial);
   const [title, setTitle] = useState(initial.title);
   const [date, setDate] = useState(initial.date);
   const [month, setMonth] = useState(monthOf(initial.date));
@@ -120,11 +142,17 @@ function EntryForm({
   const update = useUpdateEntry(calendarId, entry?.id ?? '');
   const save = entry ? update : create;
   const trimmed = title.trim();
-  const moved = entry && entry.date !== date && entry.accepted.length + entry.declined.length > 0;
+  const moved =
+    entry && date !== original.date && entry.date !== date && entry.accepted.length + entry.declined.length > 0;
 
   const submit = () => {
     if (trimmed === '' || save.isPending) return;
     const body = { title: trimmed, date, color };
+    // Only what the user changed, so edits someone else made meanwhile stay.
+    const changes: Partial<EntryFields> = {};
+    if (trimmed !== original.title) changes.title = trimmed;
+    if (date !== original.date) changes.date = date;
+    if (color !== original.color) changes.color = color;
     const options = {
       // Back to the calendar on the entry's day, or to the entry itself.
       onSuccess: (saved: Entry) =>
@@ -132,7 +160,7 @@ function EntryForm({
           ? close()
           : router.dismissTo({ pathname: '/calendars/[id]', params: { id: calendarId, day: saved.date } }),
     };
-    if (entry) update.mutate(body, options);
+    if (entry) update.mutate(changes, options);
     else create.mutate(body, options);
   };
 

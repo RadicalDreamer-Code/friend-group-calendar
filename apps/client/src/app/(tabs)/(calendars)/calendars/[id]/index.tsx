@@ -13,20 +13,17 @@ import { ListRow, ListSection } from '@/components/ListSection';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import { Page } from '@/components/Page';
 import { Text } from '@/components/Text';
-import { daysOfMonth, firstMonth, lastMonth, monthOf, relativeDay, today } from '@/lib/dates';
+import { isISODate, monthOf, relativeDay, today } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { goBack } from '@/lib/navigation';
 import { createStyles } from '@/theme/ThemeProvider';
 import { entryColor, space } from '@/theme/tokens';
 
-const isDate = (s: string | undefined): s is string =>
-  !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && monthOf(s) >= firstMonth && monthOf(s) <= lastMonth;
-
 /** A calendar's month view: the grid, and the selected day's entries below it. */
 export default function MonthScreen() {
   const { id, day } = useLocalSearchParams<{ id: string; day?: string }>();
   // The selected day lives in the URL, so reloading or sharing keeps it.
-  const selected = isDate(day) && daysOfMonth(monthOf(day)).includes(day) ? day : today();
+  const selected = isISODate(day) ? day : today();
   const calendar = useCalendar(id);
   const back = { label: 'Calendars', onPress: () => goBack('/') };
   useRefreshOnFocus(calendar);

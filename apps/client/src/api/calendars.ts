@@ -19,7 +19,7 @@ export function useCalendars() {
 
 /** True when the calendar is gone or the user is no longer a member. */
 export function isCalendarGone(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404;
+  return error instanceof ApiError && error.code === 'calendar_not_found';
 }
 
 /** One calendar with its members, polled while the screen is focused. */
@@ -49,7 +49,10 @@ function useCalendarMutation<V>(id: string, mutationFn: (variables: V) => Promis
     scope: calendarScope(id),
     onSuccess: (calendar) => queryClient.setQueryData(calendarQueryKey(id), calendar),
     onError: (error) => {
-      if (isCalendarGone(error)) queryClient.invalidateQueries({ queryKey: calendarQueryKey(id) });
+      // The calendar, or a member it still lists, is gone: reload it.
+      if (error instanceof ApiError && error.status === 404) {
+        queryClient.invalidateQueries({ queryKey: calendarQueryKey(id) });
+      }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: calendarsQueryKey, exact: true }),
   });

@@ -43,6 +43,13 @@ export function daysOfMonth(month: string): string[] {
 export const firstMonth = '2000-01';
 export const lastMonth = '2099-12';
 
+/** True for a real YYYY-MM-DD day between firstMonth and lastMonth, e.g. from a URL. */
+export function isISODate(s: string | undefined): s is string {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const month = monthOf(s);
+  return month >= firstMonth && month <= lastMonth && daysOfMonth(month).includes(s);
+}
+
 /**
  * The weekday weeks start on, 0 = Sunday, from the device's locale where the
  * platform tells us, else Monday.
