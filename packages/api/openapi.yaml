@@ -724,6 +724,200 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /calendars/{calendarId}/entries:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    get:
+      operationId: listEntries
+      summary: The entries of one month
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: The month, as YYYY-MM.
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-[0-9]{2}$"
+            example: "2026-10"
+      responses:
+        "200":
+          description: Entries by date, then in the order they were added
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createEntry
+      summary: Add an entry (owner and editors)
+      description: |
+        Error codes: `invalid_title`, `invalid_date`, `invalid_color`, `forbidden`,
+        `day_full` (20 entries on that day), `too_many_entries` (5000 in the calendar).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, date, color]
+              properties:
+                title:
+                  $ref: "#/components/schemas/EntryTitle"
+                date:
+                  $ref: "#/components/schemas/EntryDate"
+                color:
+                  $ref: "#/components/schemas/EntryColor"
+      responses:
+        "201":
+          description: The new entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}/entries/{entryId}:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+      - $ref: "#/components/parameters/EntryId"
+    get:
+      operationId: getEntry
+      summary: One entry
+      description: "`entry_not_found` when it was deleted."
+      responses:
+        "200":
+          description: The entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateEntry
+      summary: Change an entry (owner and editors)
+      description: |
+        Moving an entry to another date clears everyone's answers.
+        Error codes as for creating, plus `entry_not_found`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  $ref: "#/components/schemas/EntryTitle"
+                date:
+                  $ref: "#/components/schemas/EntryDate"
+                color:
+                  $ref: "#/components/schemas/EntryColor"
+      responses:
+        "200":
+          description: The updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteEntry
+      summary: Delete an entry (owner and editors)
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}/entries/{entryId}/response:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+      - $ref: "#/components/parameters/EntryId"
+    put:
+      operationId: respondToEntry
+      summary: Accept or decline an entry (every member)
+      description: "Error codes: `invalid_status`, `entry_not_found`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/EntryResponseStatus"
+      responses:
+        "200":
+          description: The entry with the new answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteEntryResponse
+      summary: Take your answer back, so it is pending again
+      responses:
+        "200":
+          description: The entry without the caller's answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
   /avatars/{userId}/{file}:
     get:
       operationId: getAvatar
@@ -766,6 +960,13 @@ components:
   parameters:
     CalendarId:
       name: calendarId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EntryId:
+      name: entryId
       in: path
       required: true
       schema:
@@ -997,3 +1198,60 @@ components:
         joinedAt:
           type: string
           format: date-time
+
+    EntryTitle:
+      type: string
+      minLength: 1
+      maxLength: 80
+      description: Trimmed; 1–80 characters.
+
+    EntryDate:
+      type: string
+      format: date
+      description: A whole day, YYYY-MM-DD, from 2000-01-01 to 2099-12-31.
+
+    EntryColor:
+      description: One of the preset entry colors.
+      type: string
+      enum: [fjord, sage, clay, rose, plum, sand, moss, slate]
+
+    EntryResponseStatus:
+      type: string
+      enum: [accepted, declined]
+
+    Entry:
+      type: object
+      required: [id, title, date, color, createdBy, createdAt, updatedAt, accepted, declined]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        date:
+          $ref: "#/components/schemas/EntryDate"
+        color:
+          $ref: "#/components/schemas/EntryColor"
+        createdBy:
+          description: Who added it; null once their account is deleted.
+          oneOf:
+            - $ref: "#/components/schemas/Person"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        accepted:
+          description: IDs of members who accepted, in the order they answered.
+          type: array
+          items:
+            type: string
+            format: uuid
+        declined:
+          description: IDs of members who declined. Members in neither list have not answered.
+          type: array
+          items:
+            type: string
+            format: uuid

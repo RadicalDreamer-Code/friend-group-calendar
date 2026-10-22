@@ -79,6 +79,11 @@ export const entryColors = [
 
 export type EntryColorId = (typeof entryColors)[number]['id'];
 
+/** The color value of an entry color id. */
+export function entryColor(id: string): string {
+  return entryColors.find((c) => c.id === id)?.value ?? entryColors[0].value;
+}
+
 /** 4/8 pt spacing grid. */
 export const space = {
   xxs: 2,

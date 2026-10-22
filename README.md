@@ -65,7 +65,7 @@ apps/client      Expo + Expo Router app (web, iOS, Android), TypeScript
 services/api     Go API: chi, pgx, goose migrations (embedded, run on startup), sqlc
   internal/auth  email codes, sessions          internal/users  username, avatar
   internal/friends  friend requests, friendships, username search
-  internal/calendars  calendars, members, roles and who may do what
+  internal/calendars  calendars, members, roles, entries, answers and who may do what
 packages/api     openapi.yaml, the contract between client and API
 ```
 
@@ -95,8 +95,8 @@ need a username first.
 
 Anyone with a username can create a calendar and becomes its owner. There is exactly one
 owner, who renames or deletes the calendar, changes members' roles, removes members and can
-make another member the owner (and then stays on as an editor who can invite). Editors will add
-and edit entries, viewers see them and accept or decline. The owner can invite friends, and so
+make another member the owner (and then stays on as an editor who can invite). Editors add,
+edit and delete entries, viewers see them and accept or decline. The owner can invite friends, and so
 can members who were given the invite right, either one by one or with "Everyone can invite".
 Only your own friends can be invited; they join right away, as viewers unless you pick a role,
 and never with a higher role than yours. Everyone but the owner can leave.
@@ -105,6 +105,20 @@ All permissions are decided in one place, `Membership.Can` in `internal/calendar
 change locks the calendar row first so concurrent changes (two transfers at once, say) cannot
 leave it in a broken state. People who are not members get `404 calendar_not_found`, so
 calendar IDs reveal nothing. Limits: 50 members per calendar, 50 owned calendars per user.
+
+## Entries
+
+Entries are whole days with a name, a date (`YYYY-MM-DD`, no time zone) and one of eight preset
+colors. The owner and editors add, edit and delete them, and every member accepts or declines;
+not answering is pending, and an answer can be taken back. Moving an entry to another day clears
+its answers, because they were for the old day. Leaving a calendar drops your answers in it.
+Entries are listed a month at a time (`GET /calendars/{id}/entries?month=2026-10`), with the IDs
+of who accepted and who declined; the client matches them against the members it already has.
+Limits: 20 entries a day, 5000 per calendar, dates from 2000 to 2099.
+
+The client keeps shared data fresh without live updates: queries refetch when the app or tab
+comes back into focus or a screen is shown again, and calendar screens poll every 30 seconds
+while they are on screen. Answers show right away and are sent in order, so the last tap wins.
 
 ## Design
 
@@ -123,5 +137,5 @@ Tracked on the Trello board "Event Planner".
 2. Email-code sign-in, long sessions, profile with username and avatar ✅
 3. Friends: requests and list ✅
 4. Calendars, members, roles and invite rights ✅
-5. Entries, month view, accept / decline
+5. Entries, month view, accept / decline ✅
 6. Polish, PWA, CI, production deployment

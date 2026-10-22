@@ -42,6 +42,12 @@ func TestCan(t *testing.T) {
 		{"owner cannot leave", owner, ActionLeave, false},
 		{"editor leaves", editor, ActionLeave, true},
 		{"viewer leaves", viewer, ActionLeave, true},
+		{"owner edits entries", owner, ActionEditEntries, true},
+		{"editor edits entries", editor, ActionEditEntries, true},
+		{"viewer cannot edit entries", viewer, ActionEditEntries, false},
+		{"invite right is not editing entries", inviter, ActionEditEntries, false},
+		{"viewer responds", viewer, ActionRespond, true},
+		{"owner responds", owner, ActionRespond, true},
 		{"unknown action", owner, Action(99), false},
 	}
 	for _, tt := range tests {

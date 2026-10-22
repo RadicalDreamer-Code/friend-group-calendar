@@ -452,6 +452,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calendars/{calendarId}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        /** The entries of one month */
+        get: operations["listEntries"];
+        put?: never;
+        /**
+         * Add an entry (owner and editors)
+         * @description Error codes: `invalid_title`, `invalid_date`, `invalid_color`, `forbidden`,
+         *     `day_full` (20 entries on that day), `too_many_entries` (5000 in the calendar).
+         */
+        post: operations["createEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendars/{calendarId}/entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One entry
+         * @description `entry_not_found` when it was deleted.
+         */
+        get: operations["getEntry"];
+        put?: never;
+        post?: never;
+        /** Delete an entry (owner and editors) */
+        delete: operations["deleteEntry"];
+        options?: never;
+        head?: never;
+        /**
+         * Change an entry (owner and editors)
+         * @description Moving an entry to another date clears everyone's answers.
+         *     Error codes as for creating, plus `entry_not_found`.
+         */
+        patch: operations["updateEntry"];
+        trace?: never;
+    };
+    "/calendars/{calendarId}/entries/{entryId}/response": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Accept or decline an entry (every member)
+         * @description Error codes: `invalid_status`, `entry_not_found`.
+         */
+        put: operations["respondToEntry"];
+        post?: never;
+        /** Take your answer back, so it is pending again */
+        delete: operations["deleteEntryResponse"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/avatars/{userId}/{file}": {
         parameters: {
             query?: never;
@@ -586,6 +663,37 @@ export interface components {
             /** Format: date-time */
             joinedAt: string;
         };
+        /** @description Trimmed; 1–80 characters. */
+        EntryTitle: string;
+        /**
+         * Format: date
+         * @description A whole day, YYYY-MM-DD, from 2000-01-01 to 2099-12-31.
+         */
+        EntryDate: string;
+        /**
+         * @description One of the preset entry colors.
+         * @enum {string}
+         */
+        EntryColor: "fjord" | "sage" | "clay" | "rose" | "plum" | "sand" | "moss" | "slate";
+        /** @enum {string} */
+        EntryResponseStatus: "accepted" | "declined";
+        Entry: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            date: components["schemas"]["EntryDate"];
+            color: components["schemas"]["EntryColor"];
+            /** @description Who added it; null once their account is deleted. */
+            createdBy: components["schemas"]["Person"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description IDs of members who accepted, in the order they answered. */
+            accepted: string[];
+            /** @description IDs of members who declined. Members in neither list have not answered. */
+            declined: string[];
+        };
     };
     responses: {
         /** @description Error */
@@ -611,6 +719,7 @@ export interface components {
     };
     parameters: {
         CalendarId: string;
+        EntryId: string;
         /** @description The other user. */
         UserId: string;
     };
@@ -1364,6 +1473,217 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listEntries: {
+        parameters: {
+            query: {
+                /** @description The month, as YYYY-MM. */
+                month: string;
+            };
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entries by date, then in the order they were added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        entries: components["schemas"]["Entry"][];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    title: components["schemas"]["EntryTitle"];
+                    date: components["schemas"]["EntryDate"];
+                    color: components["schemas"]["EntryColor"];
+                };
+            };
+        };
+        responses: {
+            /** @description The new entry */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    getEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    title?: components["schemas"]["EntryTitle"];
+                    date?: components["schemas"]["EntryDate"];
+                    color?: components["schemas"]["EntryColor"];
+                };
+            };
+        };
+        responses: {
+            /** @description The updated entry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    respondToEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status: components["schemas"]["EntryResponseStatus"];
+                };
+            };
+        };
+        responses: {
+            /** @description The entry with the new answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteEntryResponse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry without the caller's answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
                 };
             };
             401: components["responses"]["Error"];

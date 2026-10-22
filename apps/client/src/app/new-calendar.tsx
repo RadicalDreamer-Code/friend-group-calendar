@@ -22,8 +22,10 @@ export default function NewCalendarScreen() {
     if (trimmed === '' || create.isPending) return;
     create.mutate(trimmed, {
       onSuccess: (calendar) => {
-        // Next stop: inviting people, from the new calendar's settings.
+        // Next stop: inviting people, from the new calendar's settings,
+        // which lead back to its month view.
         router.dismissTo('/');
+        router.push({ pathname: '/calendars/[id]', params: { id: calendar.id } });
         router.push({ pathname: '/calendars/[id]/settings', params: { id: calendar.id } });
       },
     });

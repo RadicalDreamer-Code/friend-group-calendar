@@ -7,9 +7,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SessionProvider, useSession } from '@/auth/session';
 import { SignInFlowProvider } from '@/auth/signInFlow';
+import { listenForAppFocus } from '@/lib/freshness';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 
 SplashScreen.preventAutoHideAsync();
+listenForAppFocus();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +66,7 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="edit-username" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="new-calendar" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="edit-entry" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={status === 'needsUsername'}>
           <Stack.Screen name="welcome" />

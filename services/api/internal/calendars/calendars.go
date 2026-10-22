@@ -3,7 +3,7 @@
 //
 // Every calendar has exactly one owner. The owner renames and deletes it,
 // manages members and their roles, decides who may invite, and can hand
-// ownership to another member. Editors will add and edit entries, viewers
+// ownership to another member. Editors add, edit and delete entries, viewers
 // only see and answer them. Inviting is open to the owner and to members
 // with the invite right, which the owner grants per member or to everyone.
 //
@@ -101,6 +101,10 @@ const (
 	ActionTransfer
 	ActionDelete
 	ActionLeave
+	// ActionEditEntries covers adding, editing and deleting entries.
+	ActionEditEntries
+	// ActionRespond is accepting or declining an entry.
+	ActionRespond
 )
 
 // Membership is a user's place in a calendar.
@@ -115,7 +119,7 @@ type Membership struct {
 // Can is the single place that decides what a member may do.
 func (m Membership) Can(a Action) bool {
 	switch a {
-	case ActionView:
+	case ActionView, ActionRespond:
 		return true
 	case ActionInvite:
 		return m.Role == RoleOwner || m.CanInvite || m.MembersCanInvite
@@ -123,6 +127,8 @@ func (m Membership) Can(a Action) bool {
 		return m.Role != RoleOwner
 	case ActionManage, ActionTransfer, ActionDelete:
 		return m.Role == RoleOwner
+	case ActionEditEntries:
+		return m.Role == RoleOwner || m.Role == RoleEditor
 	}
 	return false
 }
@@ -232,17 +238,23 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]Summary, error)
 
 // Get returns a calendar the user is a member of.
 func (s *Service) Get(ctx context.Context, calendarID, userID uuid.UUID) (Calendar, error) {
-	cal, err := s.q.GetCalendar(ctx, calendarID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Calendar{}, ErrNotFound
-	} else if err != nil {
-		return Calendar{}, fmt.Errorf("load calendar: %w", err)
-	}
-	me, err := membership(ctx, s.q, cal, userID)
+	cal, me, err := s.view(ctx, calendarID, userID)
 	if err != nil {
 		return Calendar{}, err
 	}
 	return s.load(ctx, s.q, cal, me)
+}
+
+// view loads a calendar for reading, with the user's membership.
+func (s *Service) view(ctx context.Context, calendarID, userID uuid.UUID) (store.Calendar, Membership, error) {
+	cal, err := s.q.GetCalendar(ctx, calendarID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return cal, Membership{}, ErrNotFound
+	} else if err != nil {
+		return cal, Membership{}, fmt.Errorf("load calendar: %w", err)
+	}
+	me, err := membership(ctx, s.q, cal, userID)
+	return cal, me, err
 }
 
 // Create makes a calendar with the user as its owner.
@@ -389,7 +401,8 @@ func (s *Service) UpdateMember(ctx context.Context, calendarID, userID, memberID
 }
 
 // RemoveMember takes someone out of the calendar. Removing yourself is
-// leaving, which every member but the owner may do.
+// leaving, which every member but the owner may do. Their answers to
+// entries go with them.
 func (s *Service) RemoveMember(ctx context.Context, calendarID, userID, memberID uuid.UUID) error {
 	action := ActionManage
 	if memberID == userID {
@@ -400,6 +413,9 @@ func (s *Service) RemoveMember(ctx context.Context, calendarID, userID, memberID
 			if _, err := otherMember(ctx, q, cal.ID, memberID); err != nil {
 				return err
 			}
+		}
+		if err := q.DeleteMemberEntryResponses(ctx, store.DeleteMemberEntryResponsesParams{CalendarID: cal.ID, UserID: memberID}); err != nil {
+			return fmt.Errorf("delete responses: %w", err)
 		}
 		_, err := q.DeleteCalendarMember(ctx, store.DeleteCalendarMemberParams{CalendarID: cal.ID, UserID: memberID})
 		return err
