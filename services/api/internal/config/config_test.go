@@ -65,3 +65,22 @@ func TestLoadParsesAllowedOrigins(t *testing.T) {
 		t.Fatalf("AllowedOrigins = %q, want %q", cfg.AllowedOrigins, want)
 	}
 }
+
+func TestLoadTrustedProxies(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("TRUSTED_PROXIES", "172.28.80.0/24, fd00::/8")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"172.28.80.0/24", "fd00::/8"}
+	if !slices.Equal(cfg.TrustedProxies, want) {
+		t.Fatalf("TrustedProxies = %q, want %q", cfg.TrustedProxies, want)
+	}
+
+	// A bare address is a likely typo for a /32 and must not be guessed at.
+	t.Setenv("TRUSTED_PROXIES", "172.28.80.2")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
+		t.Fatalf("err = %v, want a TRUSTED_PROXIES error", err)
+	}
+}

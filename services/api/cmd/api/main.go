@@ -1,9 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +28,15 @@ import (
 const cleanupInterval = time.Hour
 
 func main() {
+	// `api healthcheck` lets Docker check a running server: the production
+	// image has no shell or curl to do it with.
+	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
+		if err := healthcheck(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		slog.Error("api stopped", "err", err)
 		os.Exit(1)
@@ -65,6 +77,7 @@ func run() error {
 	handler, err := httpapi.NewRouter(httpapi.Options{
 		DB:             pool,
 		AllowedOrigins: cfg.AllowedOrigins,
+		TrustedProxies: cfg.TrustedProxies,
 		Auth:           authService,
 		Users:          users.NewService(pool, avatars),
 		Friends:        friends.NewService(pool, friends.DefaultLimits),
@@ -105,6 +118,25 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// healthcheck asks the server listening on API_ADDR for /healthz, which
+// also checks the database.
+func healthcheck() error {
+	_, port, err := net.SplitHostPort(cmp.Or(os.Getenv("API_ADDR"), ":8080"))
+	if err != nil {
+		return fmt.Errorf("API_ADDR: %w", err)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort("127.0.0.1", port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz: %s", resp.Status)
+	}
+	return nil
 }
 
 func runCleanup(ctx context.Context, a *auth.Service) {

@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -19,6 +20,10 @@ type Config struct {
 	DatabaseURL string
 	// AllowedOrigins lists the web origins that may call the API with credentials.
 	AllowedOrigins []string
+	// TrustedProxies are the CIDR prefixes of reverse proxies in front of the
+	// API. X-Forwarded-For is read only on requests from them; without any,
+	// the client IP is the TCP peer.
+	TrustedProxies []string
 	// ShutdownTimeout bounds how long in-flight requests get to finish on shutdown.
 	ShutdownTimeout time.Duration
 	// LogFormat is "text" (readable, for development) or "json".
@@ -68,6 +73,7 @@ func Load() (Config, error) {
 		PublicURL:       strings.TrimRight(env("API_PUBLIC_URL", "http://localhost:8080"), "/"),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		AllowedOrigins:  splitList(env("API_ALLOWED_ORIGINS", "http://localhost:8082")),
+		TrustedProxies:  splitList(os.Getenv("TRUSTED_PROXIES")),
 		ShutdownTimeout: 10 * time.Second,
 		LogFormat:       env("LOG_FORMAT", "text"),
 		AuthSecret:      []byte(os.Getenv("AUTH_SECRET")),
@@ -101,6 +107,11 @@ func Load() (Config, error) {
 	}
 	if cfg.S3.Endpoint == "" || cfg.S3.AccessKey == "" || cfg.S3.SecretKey == "" {
 		fail("S3_ENDPOINT, S3_ACCESS_KEY and S3_SECRET_KEY are required")
+	}
+	for _, p := range cfg.TrustedProxies {
+		if _, err := netip.ParsePrefix(p); err != nil {
+			fail("TRUSTED_PROXIES must be CIDR prefixes like 172.28.80.0/24, got %q", p)
+		}
 	}
 	if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		fail("API_PUBLIC_URL must be an absolute http(s) URL")

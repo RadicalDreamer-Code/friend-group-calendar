@@ -1,0 +1,114 @@
+# Production stack: Caddy (HTTPS, web app), the API, Postgres and daily backups.
+# On the server, in this folder:  cp .env.example .env  (fill it in)  then
+#   docker compose up -d --build
+# See README.md for the whole setup.
+name: friend-calendar
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-calendar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-calendar}
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ../services/api
+      target: prod
+    restart: unless-stopped
+    environment:
+      API_ADDR: ":8080"
+      API_PUBLIC_URL: https://api.${DOMAIN:?set DOMAIN in .env}
+      API_ALLOWED_ORIGINS: https://app.${DOMAIN}
+      # X-Forwarded-For is believed from Caddy's address only. Not the whole
+      # network: Docker hands some connections to Caddy from the network's
+      # gateway, and those must count as the client, not as a proxy.
+      TRUSTED_PROXIES: ${CADDY_IP:-172.28.80.10}/32
+      DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable
+      LOG_FORMAT: json
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (openssl rand -hex 32)}
+      COOKIE_SECURE: "true"
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST in .env}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in .env}
+      S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT in .env}
+      S3_REGION: ${S3_REGION:-auto}
+      S3_BUCKET: ${S3_BUCKET:-avatars}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+      S3_USE_SSL: ${S3_USE_SSL:-true}
+    healthcheck:
+      test: ["CMD", "/api", "healthcheck"]
+      interval: 30s
+      timeout: 6s
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Caddy with the web app built in: HTTPS for app.DOMAIN and api.DOMAIN.
+  web:
+    build:
+      context: ../apps/client
+      target: prod
+      args:
+        EXPO_PUBLIC_API_URL: https://api.${DOMAIN}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      default:
+        ipv4_address: ${CADDY_IP:-172.28.80.10}
+    depends_on:
+      - api
+
+  # pg_dump once a day; see backup.sh. Dumps land in ./backups on the host.
+  backup:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-calendar}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-calendar}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-3}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    entrypoint: ["sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  default:
+    # A fixed subnet, so Caddy gets a fixed address the API can trust (TRUSTED_PROXIES).
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.28.80.0/24}
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

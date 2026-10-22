@@ -26,6 +26,8 @@ const healthTimeout = 2 * time.Second
 type Options struct {
 	DB             *pgxpool.Pool
 	AllowedOrigins []string
+	// TrustedProxies are CIDR prefixes of reverse proxies whose X-Forwarded-For is believed.
+	TrustedProxies []string
 	Auth           *auth.Service
 	Users          *users.Service
 	Friends        *friends.Service
@@ -75,9 +77,14 @@ func NewRouter(o Options) (http.Handler, error) {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	// Client IP from the TCP peer only; headers like X-Forwarded-For are spoofable.
-	// Behind a reverse proxy, switch to middleware.ClientIPFromXFFTrustedProxies.
-	r.Use(middleware.ClientIPFromRemoteAddr)
+	// The client IP (for rate limits and logs) is the TCP peer: headers like
+	// X-Forwarded-For are spoofable. Behind a reverse proxy, the proxy's
+	// X-Forwarded-For is read, but only on requests that come from it.
+	if len(o.TrustedProxies) > 0 {
+		r.Use(middleware.ClientIPFromXFF(o.TrustedProxies...))
+	} else {
+		r.Use(middleware.ClientIPFromRemoteAddr)
+	}
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
