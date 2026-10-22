@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePollWhileFocused } from '@/lib/freshness';
+
 import { api, ApiError, unwrap, type Calendar, type MemberRole } from './client';
 
 const calendarsQueryKey = ['calendars'] as const;
-const calendarQueryKey = (id: string) => [...calendarsQueryKey, id] as const;
+export const calendarQueryKey = (id: string) => [...calendarsQueryKey, id] as const;
 
 export const calendarNameMaxLength = 50;
 
@@ -20,10 +22,12 @@ export function isCalendarGone(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
 }
 
+/** One calendar with its members, polled while the screen is focused. */
 export function useCalendar(id: string) {
   return useQuery({
     queryKey: calendarQueryKey(id),
     queryFn: () => unwrap(api.GET('/calendars/{calendarId}', { params: { path: { calendarId: id } } })),
+    refetchInterval: usePollWhileFocused(),
     retry: (failures, error) => !isCalendarGone(error) && failures < 1,
   });
 }
@@ -134,3 +138,8 @@ export const roleDescription: Record<MemberRole, string> = {
   editor: 'Can add and edit entries.',
   viewer: 'Can see entries and accept or decline them.',
 };
+
+/** The owner and editors add, edit and delete entries. */
+export function canEditEntries(role: Calendar['role']): boolean {
+  return role === 'owner' || role === 'editor';
+}

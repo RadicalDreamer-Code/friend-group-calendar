@@ -20,7 +20,7 @@ import { Switch } from '@/components/Switch';
 import { Text } from '@/components/Text';
 import { confirm } from '@/lib/confirm';
 import { monthYear } from '@/lib/format';
-import { goBack } from '@/lib/navigation';
+import { backTo } from '@/lib/navigation';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -34,8 +34,8 @@ export default function MemberScreen() {
   const { id, userId } = useLocalSearchParams<{ id: string; userId: string }>();
   const calendar = useCalendar(id);
   const back = {
-    label: calendar.data?.name ?? 'Calendar',
-    onPress: () => goBack({ pathname: '/calendars/[id]/settings', params: { id } }),
+    label: 'Settings',
+    onPress: () => backTo({ pathname: '/calendars/[id]/settings', params: { id } }),
   };
 
   if (calendar.isPending) {

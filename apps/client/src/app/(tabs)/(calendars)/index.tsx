@@ -10,6 +10,7 @@ import { IconButton } from '@/components/IconButton';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
 import { Text } from '@/components/Text';
+import { useRefreshOnFocus } from '@/lib/freshness';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -31,6 +32,7 @@ export default function CalendarsScreen() {
 function CalendarList({ onCreate }: { onCreate: () => void }) {
   const styles = useStyles();
   const calendars = useCalendars();
+  useRefreshOnFocus(calendars);
 
   if (calendars.isPending) {
     return (
@@ -69,7 +71,7 @@ function CalendarList({ onCreate }: { onCreate: () => void }) {
           sublabel={`${c.memberCount === 1 ? 'Only you' : `${c.memberCount} members`} · ${roleLabel[c.role]}`}
           detail={<AvatarStack people={c.members} total={c.memberCount} />}
           chevron
-          onPress={() => router.push({ pathname: '/calendars/[id]/settings', params: { id: c.id } })}
+          onPress={() => router.push({ pathname: '/calendars/[id]', params: { id: c.id } })}
         />
       ))}
     </ListSection>

@@ -20,7 +20,7 @@ import { Page } from '@/components/Page';
 import { Switch } from '@/components/Switch';
 import { TextField } from '@/components/TextField';
 import { confirm } from '@/lib/confirm';
-import { goBack } from '@/lib/navigation';
+import { backTo } from '@/lib/navigation';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -30,11 +30,14 @@ const SEPARATOR_INSET = space.lg + AVATAR_SIZE + space.md;
 export default function CalendarSettingsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const calendar = useCalendar(id);
-  const back = { label: 'Calendars', onPress: () => goBack('/') };
+  const back = {
+    label: calendar.data?.name ?? 'Calendar',
+    onPress: () => backTo({ pathname: '/calendars/[id]', params: { id } }),
+  };
 
   if (calendar.isPending) {
     return (
-      <Page title="Calendar" back={back}>
+      <Page title="Settings" back={back}>
         <ListSection>
           <ListRow label="Loading…" />
         </ListSection>
@@ -43,13 +46,13 @@ export default function CalendarSettingsScreen() {
   }
   if (calendar.isError) {
     return (
-      <Page title="Calendar" back={back}>
+      <Page title="Settings" back={back}>
         <CalendarError error={calendar.error} onRetry={() => calendar.refetch()} />
       </Page>
     );
   }
   return (
-    <Page title={calendar.data.name} back={back}>
+    <Page title="Settings" back={back}>
       <Settings calendar={calendar.data} />
     </Page>
   );

@@ -27,6 +27,24 @@ type CalendarMember struct {
 	JoinedAt   time.Time  `json:"joined_at"`
 }
 
+type Entry struct {
+	ID         uuid.UUID  `json:"id"`
+	CalendarID uuid.UUID  `json:"calendar_id"`
+	Title      string     `json:"title"`
+	Day        time.Time  `json:"day"`
+	Color      string     `json:"color"`
+	CreatedBy  *uuid.UUID `json:"created_by"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+type EntryResponse struct {
+	EntryID     uuid.UUID `json:"entry_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Status      string    `json:"status"`
+	RespondedAt time.Time `json:"responded_at"`
+}
+
 type Friendship struct {
 	RequesterID uuid.UUID  `json:"requester_id"`
 	AddresseeID uuid.UUID  `json:"addressee_id"`

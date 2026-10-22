@@ -13,7 +13,7 @@ import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
-import { goBack } from '@/lib/navigation';
+import { backTo } from '@/lib/navigation';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -29,8 +29,8 @@ export default function InviteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const calendar = useCalendar(id);
   const back = {
-    label: calendar.data?.name ?? 'Calendar',
-    onPress: () => goBack({ pathname: '/calendars/[id]/settings', params: { id } }),
+    label: 'Settings',
+    onPress: () => backTo({ pathname: '/calendars/[id]/settings', params: { id } }),
   };
 
   return (

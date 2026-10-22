@@ -16,6 +16,9 @@ export type MemberRole = components['schemas']['MemberRole'];
 export type CalendarSummary = components['schemas']['CalendarSummary'];
 export type Calendar = components['schemas']['Calendar'];
 export type CalendarMember = components['schemas']['CalendarMember'];
+export type Entry = components['schemas']['Entry'];
+export type EntryColor = components['schemas']['EntryColor'];
+export type EntryResponseStatus = components['schemas']['EntryResponseStatus'];
 
 /**
  * Base URL of the Go API. Set EXPO_PUBLIC_API_URL to change it; on a phone
