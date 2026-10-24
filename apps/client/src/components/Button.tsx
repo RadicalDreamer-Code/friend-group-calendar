@@ -9,8 +9,9 @@ import Animated, {
 
 import { haptics } from '@/lib/haptics';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { motion, radius, space } from '@/theme/tokens';
+import { mix, motion, radius, space } from '@/theme/tokens';
 
+import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
 type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
@@ -21,6 +22,10 @@ type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   loading?: boolean;
   /** small: a compact pill for actions inside list rows. */
   size?: 'regular' | 'small';
+  /** Shown before the title. */
+  icon?: IconName;
+  /** Ink face, for the picked option of a choice like "I'm in" / "Can't". */
+  selected?: boolean;
 };
 
 const FACE_HEIGHT = { regular: 50, small: 32 } as const;
@@ -39,6 +44,8 @@ export function Button({
   loading,
   disabled,
   size = 'regular',
+  icon,
+  selected,
   onPressIn,
   onPressOut,
   ...props
@@ -50,16 +57,18 @@ export function Button({
   const chunky = variant !== 'plain';
   const edge = chunky ? EDGE[size] : 0;
 
-  const textColor =
-    variant === 'primary'
+  const textColor = selected
+    ? colors.background
+    : variant === 'primary'
       ? colors.onAccent
       : destructive
         ? colors.danger
         : variant === 'plain'
           ? colors.accent
           : colors.text;
-  const [faceColor, edgeColor] =
-    variant === 'primary'
+  const [faceColor, edgeColor] = selected
+    ? [colors.text, mix(colors.text, '#000000', 0.45)]
+    : variant === 'primary'
       ? destructive
         ? [colors.danger, colors.dangerEdge]
         : [colors.accent, colors.accentEdge]
@@ -118,9 +127,12 @@ export function Button({
         {loading ? (
           <ActivityIndicator color={textColor} />
         ) : (
-          <Text variant={size === 'small' ? 'subhead' : 'headline'} style={[{ color: textColor }, styles.label]}>
-            {title}
-          </Text>
+          <View style={styles.content}>
+            {icon ? <Icon name={icon} size={size === 'small' ? 16 : 20} color={textColor} /> : null}
+            <Text variant={size === 'small' ? 'subhead' : 'headline'} style={[{ color: textColor }, styles.label]}>
+              {title}
+            </Text>
+          </View>
         )}
       </Animated.View>
     </Pressable>
@@ -153,6 +165,11 @@ const useStyles = createStyles(() => ({
   },
   pill: {
     borderRadius: radius.pill,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs + 2,
   },
   label: {
     fontWeight: '700',
