@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -10,6 +11,7 @@ import { SessionProvider, useSession } from '@/auth/session';
 import { SignInFlowProvider } from '@/auth/signInFlow';
 import { ErrorState } from '@/components/ErrorState';
 import { listenForAppFocus } from '@/lib/freshness';
+import { appFonts } from '@/theme/fonts';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +24,14 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
+  // The splash screen stays up until the fonts are in. If they fail, text
+  // falls back to the system font rather than keeping the app from starting.
+  const [fontsLoaded, fontError] = useFonts(appFonts);
+  useEffect(() => {
+    if (fontError) console.warn('Fonts failed to load, using the system font.', fontError);
+  }, [fontError]);
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
