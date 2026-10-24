@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -10,16 +10,17 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
 
 import type { Calendar } from '@/api/client';
 import { useNextEntry } from '@/api/entries';
 import { formatDay, formatShortDay, inDays } from '@/lib/dates';
-import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { entryColor, radius, space } from '@/theme/tokens';
+import { useRefreshOnFocus } from '@/lib/freshness';
+import { createStyles } from '@/theme/ThemeProvider';
+import { entryColor, layout, radius, space } from '@/theme/tokens';
 
 import { Cover } from './Cover';
 import { Icon } from './Icon';
+import { RainbowArc } from './RainbowArc';
 import { Springy } from './Springy';
 import { Text } from './Text';
 
@@ -31,8 +32,9 @@ import { Text } from './Text';
  */
 export function NextUpCard({ calendar }: { calendar: Calendar }) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const next = useNextEntry(calendar.id);
+  useRefreshOnFocus(next);
   const entry = next.data;
   if (!entry) return null;
 
@@ -50,8 +52,13 @@ export function NextUpCard({ calendar }: { calendar: Calendar }) {
       containerStyle={styles.shadow}
       scaleTo={0.98}
     >
-      <Cover color={entryColor(entry.color)} style={styles.cover} sunAt={0.62}>
-        <RainbowArc colors={colors.sunset} />
+      <Cover
+        color={entryColor(entry.color)}
+        // Taller on wide screens, so the horizon still shows in a long card.
+        style={[styles.cover, width >= layout.wideBreakpoint && styles.coverWide]}
+        sunAt={0.62}
+      >
+        <RainbowArc size={ARC} style={styles.arc} />
         <View style={styles.text}>
           <View style={styles.chip}>
             <Text variant="caption" tone="onSunset" style={styles.chipText}>
@@ -68,20 +75,6 @@ export function NextUpCard({ calendar }: { calendar: Calendar }) {
         <BobbingIcon />
       </Cover>
     </Springy>
-  );
-}
-
-/** Three sunset rings peeking in from the top right corner. */
-function RainbowArc({ colors }: { colors: readonly [string, string, string] }) {
-  const styles = useStyles();
-  // Innermost first: mustard, tangerine, coral.
-  const rings = [colors[2], colors[1], colors[0]];
-  return (
-    <Svg width={ARC} height={ARC} viewBox={`0 0 ${ARC} ${ARC}`} style={styles.arc} aria-hidden>
-      {rings.map((color, i) => (
-        <Circle key={color} cx={ARC / 2} cy={ARC / 2} r={33.5 + i * 7} stroke={color} strokeWidth={7} fill="none" />
-      ))}
-    </Svg>
   );
 }
 
@@ -121,6 +114,9 @@ const useStyles = createStyles((c) => ({
   cover: {
     height: HEIGHT,
     borderRadius: radius.lg,
+  },
+  coverWide: {
+    height: 172,
   },
   arc: {
     position: 'absolute',

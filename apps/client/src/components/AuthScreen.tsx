@@ -6,6 +6,7 @@ import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
 import { Icon } from './Icon';
+import { RainbowArc } from './RainbowArc';
 import { Text } from './Text';
 
 type AuthScreenProps = {
@@ -14,7 +15,7 @@ type AuthScreenProps = {
   children: ReactNode;
 };
 
-/** The calm, centered layout shared by the sign-in steps. */
+/** The calm, centered layout shared by the sign-in steps, with a sunset peeking in from the corner. */
 export function AuthScreen({ title, subtitle, children }: AuthScreenProps) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -22,6 +23,7 @@ export function AuthScreen({ title, subtitle, children }: AuthScreenProps) {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <RainbowArc size={ARC} style={[styles.arc, { top: insets.top - ARC / 2.6 }]} />
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -31,7 +33,7 @@ export function AuthScreen({ title, subtitle, children }: AuthScreenProps) {
       >
         <View style={styles.inner}>
           <View style={styles.logo}>
-            <Icon name="calendar" size={26} color={colors.onAccent} />
+            <Icon name="calendar" size={28} color={colors.onAccent} />
           </View>
           <Text variant="largeTitle" role="heading" aria-level={1} style={styles.title}>
             {title}
@@ -46,10 +48,17 @@ export function AuthScreen({ title, subtitle, children }: AuthScreenProps) {
   );
 }
 
+const ARC = 260;
+
 const useStyles = createStyles((c) => ({
   root: {
     flex: 1,
     backgroundColor: c.background,
+    overflow: 'hidden',
+  },
+  arc: {
+    position: 'absolute',
+    right: -ARC / 2.6,
   },
   scroll: {
     flexGrow: 1,
@@ -62,9 +71,9 @@ const useStyles = createStyles((c) => ({
     alignSelf: 'center',
   },
   logo: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.md,
+    width: 60,
+    height: 60,
+    borderRadius: radius.lg,
     backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',

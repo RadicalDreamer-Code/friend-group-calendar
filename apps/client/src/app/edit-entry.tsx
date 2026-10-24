@@ -33,14 +33,14 @@ import { entryColors, entryInk, radius, space } from '@/theme/tokens';
 export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 const colorNames: Record<EntryColor, string> = {
-  fjord: 'Fjord blue',
+  fjord: 'Lake blue',
   sage: 'Sage green',
-  clay: 'Clay orange',
-  rose: 'Rose',
+  clay: 'Burnt orange',
+  rose: 'Salmon pink',
   plum: 'Plum',
-  sand: 'Sand yellow',
-  moss: 'Moss green',
-  slate: 'Slate grey',
+  sand: 'Mustard',
+  moss: 'Avocado',
+  slate: 'Taupe',
 };
 
 const close = () => (router.canGoBack() ? router.back() : router.replace('/'));

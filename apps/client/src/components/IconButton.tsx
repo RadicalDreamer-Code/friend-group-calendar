@@ -46,7 +46,8 @@ const useStyles = createStyles((c) => ({
     width: SIZE,
     height: SIZE,
     borderRadius: radius.pill,
-    backgroundColor: c.surface,
+    // Fill rather than surface, so it still shows on a card.
+    backgroundColor: c.fill,
     alignItems: 'center',
     justifyContent: 'center',
   },

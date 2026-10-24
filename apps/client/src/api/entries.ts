@@ -61,10 +61,12 @@ export function useMonthEntries(calendarId: string, month: string) {
 
 /**
  * The first entry from today on (the device's today), or null when nothing
- * is planned. Polled while the screen is focused.
+ * is planned. Polled while the screen is focused, unless `poll` is false
+ * (the calendars list, which shows one per calendar).
  */
-export function useNextEntry(calendarId: string) {
+export function useNextEntry(calendarId: string, { poll = true } = {}) {
   const from = today();
+  const pollWhileFocused = usePollWhileFocused();
   return useQuery({
     queryKey: nextQueryKey(calendarId, from),
     queryFn: async () =>
@@ -75,7 +77,7 @@ export function useNextEntry(calendarId: string) {
           }),
         )
       ).entry,
-    refetchInterval: usePollWhileFocused(),
+    refetchInterval: poll ? pollWhileFocused : false,
     retry: (failures, error) => !isCalendarGone(error) && failures < 1,
   });
 }
