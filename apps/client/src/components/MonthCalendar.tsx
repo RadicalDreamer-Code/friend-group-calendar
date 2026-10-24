@@ -1,6 +1,12 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { PanResponder, Pressable, View } from 'react-native';
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import {
   addMonths,
@@ -42,7 +48,7 @@ type MonthCalendarProps = {
 
 /**
  * A month grid: arrows or a sideways swipe change the month, today is in
- * the accent color and the selected day is filled.
+ * coral and the selected day is an ink circle that springs in.
  */
 export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, compact }: MonthCalendarProps) {
   const styles = useStyles();
@@ -94,7 +100,7 @@ export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, 
   return (
     <View>
       <View style={styles.header}>
-        <Text variant={compact ? 'headline' : 'title'} style={styles.monthTitle} aria-live="polite">
+        <Text variant={compact ? 'cardTitle' : 'title'} style={styles.monthTitle} aria-live="polite">
           {formatMonth(month)}
         </Text>
         {monthOf(today) !== month ? (
@@ -200,6 +206,16 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, co
   const styles = useStyles();
   const { colors } = useTheme();
   const count = dayColors?.length ?? 0;
+
+  // The ink circle pops in on the newly selected day.
+  const reduceMotion = useReducedMotion();
+  const pop = useSharedValue(1);
+  useEffect(() => {
+    if (!isSelected || reduceMotion) return;
+    pop.set(0.7);
+    pop.set(withSpring(1, motion.press));
+  }, [isSelected, reduceMotion, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const label = [
     isToday ? 'Today' : null,
     formatDay(date),
@@ -217,51 +233,44 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, co
         if (!isSelected) haptics.selection();
         onSelect(date);
       }}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.cell,
-        compact && styles.cellCompact,
-        (pressed || hovered) && !isSelected && styles.cellPressed,
-      ]}
+      style={[styles.cell, compact && styles.cellCompact]}
     >
-      <View
-        style={[
-          styles.number,
-          compact && styles.numberCompact,
-          isSelected && { backgroundColor: isToday ? colors.accent : colors.text },
-        ]}
-      >
-        <Text
-          variant={compact ? 'subhead' : 'callout'}
-          style={[
-            (isToday || isSelected) && styles.numberEmphasis,
-            {
-              color: isSelected
-                ? isToday
-                  ? colors.onAccent
-                  : colors.background
-                : isToday
-                  ? colors.accent
-                  : colors.text,
-            },
-          ]}
-        >
-          {Number(date.slice(8))}
-        </Text>
-      </View>
-      {compact ? null : (
-        <View style={styles.dots}>
-          {dayColors?.slice(0, MAX_DOTS).map((c, i) => (
-            <View key={i} style={[styles.dot, { backgroundColor: c }]} />
-          ))}
-        </View>
+      {({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => (
+        <>
+          <Animated.View
+            style={[
+              styles.number,
+              compact && styles.numberCompact,
+              (pressed || hovered) && !isSelected && styles.numberPressed,
+              isSelected && [styles.numberSelected, popStyle],
+            ]}
+          >
+            <Text
+              variant={compact ? 'subhead' : 'callout'}
+              style={[
+                (isToday || isSelected) && styles.numberEmphasis,
+                { color: isSelected ? colors.background : isToday ? colors.accent : colors.text },
+              ]}
+            >
+              {Number(date.slice(8))}
+            </Text>
+          </Animated.View>
+          {compact ? null : (
+            <View style={styles.dots}>
+              {dayColors?.slice(0, MAX_DOTS).map((c, i) => (
+                <View key={i} style={[styles.dot, { backgroundColor: c }]} />
+              ))}
+            </View>
+          )}
+        </>
       )}
     </Pressable>
   );
 });
 
-const NUMBER_SIZE = 34;
-const NUMBER_SIZE_COMPACT = 30;
-const DOT_SIZE = 5;
+const NUMBER_SIZE = 36;
+const NUMBER_SIZE_COMPACT = 32;
+const DOT_SIZE = 6;
 
 const useStyles = createStyles((c) => ({
   header: {
@@ -287,18 +296,20 @@ const useStyles = createStyles((c) => ({
   },
   cell: {
     flex: 1,
-    height: 54,
+    height: 56,
     alignItems: 'center',
     paddingTop: space.xxs,
-    borderRadius: radius.sm,
   },
   cellCompact: {
     height: 38,
     justifyContent: 'center',
     paddingTop: 0,
   },
-  cellPressed: {
-    backgroundColor: c.fill,
+  numberPressed: {
+    backgroundColor: c.surface,
+  },
+  numberSelected: {
+    backgroundColor: c.text,
   },
   number: {
     width: NUMBER_SIZE,
@@ -312,13 +323,13 @@ const useStyles = createStyles((c) => ({
     height: NUMBER_SIZE_COMPACT,
   },
   numberEmphasis: {
-    fontWeight: '600',
+    fontWeight: '800',
   },
   dots: {
     flexDirection: 'row',
     gap: 3,
     height: DOT_SIZE,
-    marginTop: space.xxs,
+    marginTop: 3,
   },
   dot: {
     width: DOT_SIZE,

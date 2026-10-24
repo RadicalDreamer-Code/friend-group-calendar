@@ -9,16 +9,18 @@ import { useUser } from '@/auth/session';
 import { CalendarError } from '@/components/CalendarError';
 import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
-import { ListRow, ListSection } from '@/components/ListSection';
+import { Icon } from '@/components/Icon';
 import { MonthCalendar } from '@/components/MonthCalendar';
+import { NextUpCard } from '@/components/NextUpCard';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
+import { Springy } from '@/components/Springy';
 import { Text } from '@/components/Text';
-import { isISODate, monthOf, relativeDay, today } from '@/lib/dates';
+import { formatDay, inDays, isISODate, monthOf, relativeDay, today } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { goBack } from '@/lib/navigation';
-import { createStyles } from '@/theme/ThemeProvider';
-import { entryColor, space } from '@/theme/tokens';
+import { createStyles, useTheme } from '@/theme/ThemeProvider';
+import { entryColor, entryInk, radius, space } from '@/theme/tokens';
 
 /** A calendar's month view: the grid, and the selected day's entries below it. */
 export default function MonthScreen() {
@@ -108,6 +110,7 @@ function Month({
           retrying={calendarQuery.isFetching || entries.isFetching}
         />
       ) : null}
+      <NextUpCard calendar={calendar} />
       <View style={styles.calendar}>
         <MonthCalendar month={month} onMonthChange={changeMonth} selected={selected} onSelect={select} dots={dots} />
       </View>
@@ -143,54 +146,111 @@ function DayEntries({
 }) {
   const styles = useStyles();
   const me = useUser();
-  const title = relativeDay(date);
+  const day = formatDay(date);
+  const relative = relativeDay(date);
+  const title = relative === day ? day : `${relative} · ${day}`;
 
   if (error && !entries) return <ErrorState compact error={error} onRetry={onRetry} retrying={retrying} />;
   if (!entries) return <SkeletonList title={title} rows={1} leading="swatch" sublabel />;
   return (
-    <ListSection title={title} separatorInset={SEPARATOR_INSET}>
-      {entries.length === 0 ? (
-        <ListRow>
-          <Text tone="tertiary" style={styles.nothing}>
-            Nothing planned
-          </Text>
-        </ListRow>
-      ) : null}
+    <View style={styles.day}>
+      <Text variant="caption" tone="secondary" role="heading" aria-level={2} style={styles.dayTitle}>
+        {title}
+      </Text>
       {entries.map((e) => (
-        <ListRow
-          key={e.id}
-          leading={<View style={[styles.swatch, { backgroundColor: entryColor(e.color) }]} />}
-          label={e.title}
-          sublabel={answerSummary(e, me.id)}
-          chevron
-          onPress={() =>
-            router.push({
-              pathname: '/calendars/[id]/entries/[entryId]',
-              params: { id: calendar.id, entryId: e.id },
-            })
-          }
-        />
+        <EntryCard key={e.id} calendarId={calendar.id} entry={e} me={me.id} />
       ))}
-      {onAdd ? <ListRow label="Add entry" action="default" onPress={onAdd} /> : null}
-    </ListSection>
+      {entries.length === 0 || onAdd ? <AddCard empty={entries.length === 0} onAdd={onAdd} /> : null}
+    </View>
   );
 }
 
-/** "You’re going · 3 going, 1 declined", "You haven’t answered · 2 going", "No answers yet". */
-function answerSummary(entry: Entry, userId: string): string {
-  if (entry.accepted.length + entry.declined.length === 0) return 'No answers yet';
-  const mine = replyOf(entry, userId);
-  const you = mine === 'accepted' ? 'You’re going' : mine === 'declined' ? 'You declined' : 'You haven’t answered';
-  const counts = [];
-  if (entry.accepted.length > 0) counts.push(`${entry.accepted.length} going`);
-  if (entry.declined.length > 0) counts.push(`${entry.declined.length} declined`);
-  return `${you} · ${counts.join(', ')}`;
+/** One plan on the selected day: a soft card with its color tile, title and countdown. */
+function EntryCard({ calendarId, entry, me }: { calendarId: string; entry: Entry; me: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const summary = `${capitalize(inDays(entry.date))} · ${answerSummary(entry, me)}`;
+  return (
+    <Springy
+      role="button"
+      aria-label={`${entry.title}, ${summary}`}
+      onPress={() =>
+        router.push({ pathname: '/calendars/[id]/entries/[entryId]', params: { id: calendarId, entryId: entry.id } })
+      }
+      scaleTo={0.98}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        styles.card,
+        (pressed || hovered) && styles.cardPressed,
+      ]}
+    >
+      <View style={[styles.tile, { backgroundColor: entryColor(entry.color) }]} aria-hidden>
+        <Icon name="sparkles" size={20} color={entryInk} />
+      </View>
+      <View style={styles.cardText}>
+        <Text variant="cardTitle" numberOfLines={1}>
+          {entry.title}
+        </Text>
+        <Text variant="footnote" tone="secondary" numberOfLines={1}>
+          {summary}
+        </Text>
+      </View>
+      <Icon name="chevron-forward" size={18} color={colors.textTertiary} />
+    </Springy>
+  );
 }
 
-const SWATCH_SIZE = 12;
-const SEPARATOR_INSET = space.lg + SWATCH_SIZE + space.md;
+/** "Nothing planned yet", and for editors a way to add a plan to the day. */
+function AddCard({ empty, onAdd }: { empty: boolean; onAdd?: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const content = (
+    <>
+      {empty ? (
+        <Text tone="secondary" style={styles.addText}>
+          Nothing planned yet
+        </Text>
+      ) : null}
+      {onAdd ? (
+        <View style={styles.addAction}>
+          <Icon name="add" size={18} color={colors.text} />
+          <Text variant="headline">Add plan</Text>
+        </View>
+      ) : null}
+    </>
+  );
+  if (!onAdd) return <View style={styles.addCard}>{content}</View>;
+  // With plans on the day, the card is just the action, centered.
+  return (
+    <Springy
+      role="button"
+      aria-label="Add a plan on this day"
+      onPress={onAdd}
+      scaleTo={0.98}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        styles.addCard,
+        !empty && styles.addCardCentered,
+        (pressed || hovered) && styles.cardPressed,
+      ]}
+    >
+      {content}
+    </Springy>
+  );
+}
 
-const useStyles = createStyles(() => ({
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "You’re going", "You + 2 going", "You declined · 3 going", "3 going", "No answers yet". */
+function answerSummary(entry: Entry, userId: string): string {
+  const going = entry.accepted.length;
+  const mine = replyOf(entry, userId);
+  if (mine === 'accepted') return going === 1 ? 'You’re going' : `You + ${going - 1} going`;
+  if (mine === 'declined') return going > 0 ? `You declined · ${going} going` : 'You declined';
+  return going > 0 ? `${going} going` : 'No answers yet';
+}
+
+const TILE = 44;
+
+const useStyles = createStyles((c) => ({
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -199,12 +259,59 @@ const useStyles = createStyles(() => ({
   calendar: {
     marginTop: space.lg,
   },
-  swatch: {
-    width: SWATCH_SIZE,
-    height: SWATCH_SIZE,
-    borderRadius: SWATCH_SIZE / 2,
+  day: {
+    marginTop: space.lg,
+    gap: space.sm,
   },
-  nothing: {
+  dayTitle: {
+    paddingHorizontal: space.xs,
+    marginBottom: space.xxs,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    paddingVertical: space.sm + 2,
+    paddingLeft: space.sm + 2,
+    paddingRight: space.md,
+  },
+  cardPressed: {
+    backgroundColor: c.fill,
+  },
+  tile: {
+    width: TILE,
+    height: TILE,
+    borderRadius: radius.md - 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardText: {
     flex: 1,
+    gap: 1,
+  },
+  addCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 52,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: c.fillEdge,
+  },
+  addCardCentered: {
+    justifyContent: 'center',
+  },
+  addText: {
+    flex: 1,
+  },
+  addAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xxs,
   },
 }));

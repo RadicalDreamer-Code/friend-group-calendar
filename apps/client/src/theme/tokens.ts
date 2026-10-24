@@ -8,7 +8,7 @@ import { Easing } from 'react-native-reanimated';
  * titles (Fraunces) and chunky buttons.
  */
 
-export { entryColor, entryColors, entryInk, palette } from './colors';
+export { entryColor, entryColors, entryInk, mix, palette } from './colors';
 export type { ColorScheme, Colors, EntryColorId } from './colors';
 
 /** 4/8 pt spacing grid. */

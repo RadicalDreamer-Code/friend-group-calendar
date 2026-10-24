@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { monthOf } from '@/lib/dates';
+import { monthOf, today } from '@/lib/dates';
 import { usePollWhileFocused } from '@/lib/freshness';
 
 import { calendarQueryKey, isCalendarGone } from './calendars';
@@ -12,6 +12,11 @@ const entriesQueryKey = (calendarId: string) => [...calendarQueryKey(calendarId)
 const monthQueryKey = (calendarId: string, month: string) => [...entriesQueryKey(calendarId), month] as const;
 const entryQueryKey = (calendarId: string, entryId: string) =>
   [...calendarQueryKey(calendarId), 'entry', entryId] as const;
+// Not under entriesQueryKey: everything there is a month's list.
+const nextQueryKey = (calendarId: string, from?: string) =>
+  from
+    ? ([...calendarQueryKey(calendarId), 'next', from] as const)
+    : ([...calendarQueryKey(calendarId), 'next'] as const);
 
 /** A member's answer; null means they have not answered yet. */
 export type Reply = EntryResponseStatus | null;
@@ -54,6 +59,27 @@ export function useMonthEntries(calendarId: string, month: string) {
   });
 }
 
+/**
+ * The first entry from today on (the device's today), or null when nothing
+ * is planned. Polled while the screen is focused.
+ */
+export function useNextEntry(calendarId: string) {
+  const from = today();
+  return useQuery({
+    queryKey: nextQueryKey(calendarId, from),
+    queryFn: async () =>
+      (
+        await unwrap(
+          api.GET('/calendars/{calendarId}/entries/next', {
+            params: { path: { calendarId }, query: { from } },
+          }),
+        )
+      ).entry,
+    refetchInterval: usePollWhileFocused(),
+    retry: (failures, error) => !isCalendarGone(error) && failures < 1,
+  });
+}
+
 /** One entry, shown straight away from a loaded month when there is one. */
 export function useEntry(calendarId: string, entryId: string) {
   const queryClient = useQueryClient();
@@ -77,6 +103,11 @@ function findCached(queryClient: QueryClient, calendarId: string, entryId: strin
     const entry = (query.state.data as Entry[] | undefined)?.find((e) => e.id === entryId);
     if (entry) return { entry, updatedAt: query.state.dataUpdatedAt };
   }
+  // Opened from the Next up card, its month may not be loaded.
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: nextQueryKey(calendarId) })) {
+    const entry = query.state.data as Entry | null | undefined;
+    if (entry?.id === entryId) return { entry, updatedAt: query.state.dataUpdatedAt };
+  }
   return undefined;
 }
 
@@ -87,8 +118,9 @@ const byDay = (a: Entry, b: Entry) =>
  * Puts an entry everywhere it is shown: its own query and the month it is
  * in. It leaves any other month, which matters when its date moved.
  */
-function putEntry(queryClient: QueryClient, calendarId: string, entry: Entry) {
+function putEntry(queryClient: QueryClient, calendarId: string, entry: Entry, { optimistic = false } = {}) {
   queryClient.setQueryData(entryQueryKey(calendarId, entry.id), entry);
+  updateNext(queryClient, calendarId, entry.id, entry, !optimistic);
   for (const [key, list] of queryClient.getQueriesData<Entry[]>({ queryKey: entriesQueryKey(calendarId) })) {
     if (!list) continue;
     const month = key[key.length - 1];
@@ -99,6 +131,7 @@ function putEntry(queryClient: QueryClient, calendarId: string, entry: Entry) {
 
 function dropEntry(queryClient: QueryClient, calendarId: string, entryId: string) {
   queryClient.removeQueries({ queryKey: entryQueryKey(calendarId, entryId) });
+  updateNext(queryClient, calendarId, entryId, null);
   for (const [key, list] of queryClient.getQueriesData<Entry[]>({ queryKey: entriesQueryKey(calendarId) })) {
     if (list)
       queryClient.setQueryData(
@@ -106,6 +139,24 @@ function dropEntry(queryClient: QueryClient, calendarId: string, entryId: string
         list.filter((e) => e.id !== entryId),
       );
   }
+}
+
+/**
+ * Shows a changed (or, with null, deleted) entry in the Next up card right
+ * away, then asks the server again: another entry may be next now.
+ */
+function updateNext(
+  queryClient: QueryClient,
+  calendarId: string,
+  entryId: string,
+  entry: Entry | null,
+  refetch = true,
+) {
+  for (const [key, next] of queryClient.getQueriesData<Entry | null>({ queryKey: nextQueryKey(calendarId) })) {
+    if (next?.id === entryId) queryClient.setQueryData(key, entry);
+  }
+  // Not while an answer is still on its way: the refetch would bring back the old one.
+  if (refetch) queryClient.invalidateQueries({ queryKey: nextQueryKey(calendarId) });
 }
 
 /** After a failed change the cached entries may be wrong, so they are refetched. */
@@ -187,10 +238,11 @@ export function useRespond(calendarId: string, entryId: string, userId: string) 
       // Polls in flight must not overwrite the answer with what it was before.
       await queryClient.cancelQueries({ queryKey: entriesQueryKey(calendarId) });
       await queryClient.cancelQueries({ queryKey: entryQueryKey(calendarId, entryId) });
+      await queryClient.cancelQueries({ queryKey: nextQueryKey(calendarId) });
       const entry =
         queryClient.getQueryData<Entry>(entryQueryKey(calendarId, entryId)) ??
         findCached(queryClient, calendarId, entryId)?.entry;
-      if (entry) putEntry(queryClient, calendarId, withReply(entry, userId, reply));
+      if (entry) putEntry(queryClient, calendarId, withReply(entry, userId, reply), { optimistic: true });
     },
     onSuccess: (entry) => {
       // Only the newest answer's response is the truth; older ones would flicker.
