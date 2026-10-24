@@ -62,12 +62,12 @@ docker compose exec backup sh /backup.sh now        # one backup right away
 docker compose logs backup                          # what the last runs did
 ```
 
-Restore a dump (this replaces the current data):
+Restore a dump (this replaces the current data). It runs in the `backup` container,
+which sees the dumps at `/backups`:
 
 ```bash
 docker compose stop api
-docker compose exec -T db sh -c 'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-  < backups/calendar-2026-10-23-0300.dump
+docker compose exec backup sh -c 'pg_restore --clean --if-exists --no-owner -d "$PGDATABASE" /backups/calendar-2026-10-23-0300.dump'
 docker compose start api
 ```
 
@@ -76,6 +76,9 @@ docker compose start api
 - Sign-in codes and sessions are only as safe as `AUTH_SECRET` and the database: keep
   `.env` readable by root only (`chmod 600 .env`).
 - The API is not published on a port; only Caddy reaches it. It records the client IP
-  from Caddy's `X-Forwarded-For` (`TRUSTED_PROXIES` is Caddy's address), which the sign-in
-  rate limits count by.
+  from Caddy's `X-Forwarded-For` (`TRUSTED_PROXIES` is Caddy's addresses), which the sign-in
+  rate limits count by. IPv6 visitors keep their own address only while Docker's `ip6tables`
+  setting is on (the default since Docker 27); with it off, they all share one.
+- The dumps in `deploy/backups/` are readable by root only, like `.env`: run the job
+  that copies them off as root too.
 - Logs: `docker compose logs -f api` (JSON, one line per request) and `docker compose logs web`.

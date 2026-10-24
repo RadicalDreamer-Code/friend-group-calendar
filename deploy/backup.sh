@@ -5,6 +5,8 @@
 #
 # One backup right away:  docker compose exec backup sh /backup.sh now
 set -eu
+# The dumps hold everything in the database: readable by root only.
+umask 077
 
 hour=${BACKUP_HOUR_UTC:-3}
 keep=${BACKUP_KEEP_DAYS:-14}

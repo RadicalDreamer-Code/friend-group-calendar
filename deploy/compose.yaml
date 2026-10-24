@@ -29,10 +29,10 @@ services:
       API_ADDR: ":8080"
       API_PUBLIC_URL: https://api.${DOMAIN:?set DOMAIN in .env}
       API_ALLOWED_ORIGINS: https://app.${DOMAIN}
-      # X-Forwarded-For is believed from Caddy's address only. Not the whole
+      # X-Forwarded-For is believed from Caddy's addresses only. Not the whole
       # network: Docker hands some connections to Caddy from the network's
       # gateway, and those must count as the client, not as a proxy.
-      TRUSTED_PROXIES: ${CADDY_IP:-172.28.80.10}/32
+      TRUSTED_PROXIES: ${CADDY_IP:-172.28.80.10}/32,${CADDY_IP6:-fd7c:28:80::10}/128
       DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable
       LOG_FORMAT: json
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (openssl rand -hex 32)}
@@ -79,6 +79,7 @@ services:
     networks:
       default:
         ipv4_address: ${CADDY_IP:-172.28.80.10}
+        ipv6_address: ${CADDY_IP6:-fd7c:28:80::10}
     depends_on:
       - api
 
@@ -103,10 +104,15 @@ services:
 
 networks:
   default:
-    # A fixed subnet, so Caddy gets a fixed address the API can trust (TRUSTED_PROXIES).
+    # Fixed subnets, so Caddy gets fixed addresses the API can trust (TRUSTED_PROXIES).
+    # The network needs IPv6 too: without it Docker relays IPv6 visitors through
+    # docker-proxy, and they all arrive from the gateway's address, so they would
+    # share one client IP and one sign-in rate limit.
+    enable_ipv6: true
     ipam:
       config:
         - subnet: ${NETWORK_SUBNET:-172.28.80.0/24}
+        - subnet: ${NETWORK_SUBNET6:-fd7c:28:80::/64}
 
 volumes:
   db-data:
