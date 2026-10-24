@@ -172,6 +172,29 @@ func (s *Service) ListEntries(ctx context.Context, calendarID, userID uuid.UUID,
 	return s.withReplies(ctx, entries)
 }
 
+// NextEntry returns the first entry on or after the day `from` (YYYY-MM-DD),
+// the client's local today. ok is false when nothing is planned from then on.
+func (s *Service) NextEntry(ctx context.Context, calendarID, userID uuid.UUID, from string) (e Entry, ok bool, err error) {
+	day, err := ParseDate(from)
+	if err != nil {
+		return Entry{}, false, err
+	}
+	if _, _, err := s.view(ctx, calendarID, userID); err != nil {
+		return Entry{}, false, err
+	}
+	row, err := s.q.NextEntry(ctx, store.NextEntryParams{CalendarID: calendarID, FromDay: day})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Entry{}, false, nil
+	} else if err != nil {
+		return Entry{}, false, fmt.Errorf("next entry: %w", err)
+	}
+	entries, err := s.withReplies(ctx, []Entry{entry(store.GetEntryWithCreatorRow(row))})
+	if err != nil {
+		return Entry{}, false, err
+	}
+	return entries[0], true, nil
+}
+
 // GetEntry returns one entry of a calendar the user is a member of.
 func (s *Service) GetEntry(ctx context.Context, calendarID, userID, entryID uuid.UUID) (Entry, error) {
 	if _, _, err := s.view(ctx, calendarID, userID); err != nil {

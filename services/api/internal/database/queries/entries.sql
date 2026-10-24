@@ -65,3 +65,13 @@ DELETE FROM entry_responses WHERE entry_id = $1;
 DELETE FROM entry_responses r
 USING entries e
 WHERE e.id = r.entry_id AND e.calendar_id = sqlc.arg(calendar_id) AND r.user_id = sqlc.arg(user_id);
+
+-- name: NextEntry :one
+-- The first entry on or after `from_day`, by day and then in the order they were added.
+SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+       COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
+FROM entries e
+LEFT JOIN users u ON u.id = e.created_by
+WHERE e.calendar_id = sqlc.arg(calendar_id) AND e.day >= sqlc.arg(from_day)
+ORDER BY e.day, e.created_at, e.id
+LIMIT 1;

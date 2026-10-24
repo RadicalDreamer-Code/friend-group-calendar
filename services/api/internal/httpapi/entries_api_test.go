@@ -89,6 +89,21 @@ func TestEntriesFlow(t *testing.T) {
 		t.Fatalf("October: %d %s", resp.StatusCode, body)
 	}
 
+	// The next entry from a day on; null once nothing is left.
+	var next struct {
+		Entry *entryJSON `json:"entry"`
+	}
+	resp, body = carla.do("GET", path+"/entries/next?from=2026-10-31", nil)
+	decode(t, body, &next)
+	if resp.StatusCode != http.StatusOK || next.Entry == nil || next.Entry.ID != e.ID ||
+		!slices.Equal(next.Entry.Accepted, []string{carlaMe.User.ID}) {
+		t.Fatalf("next: %d %s", resp.StatusCode, body)
+	}
+	resp, body = carla.do("GET", path+"/entries/next?from=2026-11-02", nil)
+	if resp.StatusCode != http.StatusOK || string(body) != `{"entry":null}`+"\n" {
+		t.Fatalf("nothing next: %d %q", resp.StatusCode, body)
+	}
+
 	e = bob.entry("PATCH", entryPath, map[string]string{"title": "Ski weekend", "date": "2026-11-07", "color": "fjord"}, http.StatusOK)
 	if e.Title != "Ski weekend" || e.Date != "2026-11-07" || e.Color != "fjord" || len(e.Accepted) != 0 {
 		t.Fatalf("after moving = %+v", e)
@@ -131,6 +146,8 @@ func TestEntriesErrors(t *testing.T) {
 		{"PUT", entryPath + "/response", map[string]string{}, http.StatusBadRequest, "invalid_status"},
 		{"GET", path + "/entries/not-a-uuid", nil, http.StatusNotFound, "entry_not_found"},
 		{"PATCH", path + "/entries/00000000-0000-0000-0000-000000000000", map[string]string{"title": "x"}, http.StatusNotFound, "entry_not_found"},
+		{"GET", path + "/entries/next", nil, http.StatusBadRequest, "invalid_date"},
+		{"GET", path + "/entries/next?from=2026-02-30", nil, http.StatusBadRequest, "invalid_date"},
 		{"GET", "/calendars/not-a-uuid/entries?month=2026-10", nil, http.StatusNotFound, "calendar_not_found"},
 	} {
 		resp, body := ada.do(tt.method, tt.path, tt.body)

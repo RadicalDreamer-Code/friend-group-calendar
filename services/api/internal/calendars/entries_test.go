@@ -131,6 +131,49 @@ func TestEntriesCreateListUpdateDelete(t *testing.T) {
 	}
 }
 
+func TestNextEntry(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+
+	if _, ok, err := f.svc.NextEntry(ctx, g.cal.ID, g.carla, "2026-10-24"); err != nil || ok {
+		t.Fatalf("empty calendar: ok %v, %v", ok, err)
+	}
+	f.entry(t, g, g.ada, "Past", "2026-10-23")
+	first := f.entry(t, g, g.ada, "First", "2026-10-31")
+	f.entry(t, g, g.bob, "Same day, later", "2026-10-31")
+	f.entry(t, g, g.ada, "November", "2026-11-02")
+	if _, err := f.svc.Respond(ctx, g.cal.ID, g.carla, first.ID, ReplyAccepted); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct{ from, want string }{
+		{"2026-10-24", "First"}, // skips past entries, takes the oldest of the day
+		{"2026-10-23", "Past"},  // includes the day itself
+		{"2026-11-01", "November"},
+	} {
+		e, ok, err := f.svc.NextEntry(ctx, g.cal.ID, g.carla, tt.from)
+		if err != nil || !ok || e.Title != tt.want {
+			t.Fatalf("from %s = %q, %v, %v; want %q", tt.from, e.Title, ok, err, tt.want)
+		}
+	}
+	e, _, _ := f.svc.NextEntry(ctx, g.cal.ID, g.carla, "2026-10-24")
+	if !slices.Equal(e.Accepted, []uuid.UUID{g.carla}) || e.CreatedBy == nil {
+		t.Fatalf("answers and creator = %+v", e)
+	}
+	if _, ok, err := f.svc.NextEntry(ctx, g.cal.ID, g.carla, "2026-11-03"); err != nil || ok {
+		t.Fatalf("after the last entry: ok %v, %v", ok, err)
+	}
+
+	if _, _, err := f.svc.NextEntry(ctx, g.cal.ID, g.carla, "2026-10"); !errors.Is(err, ErrInvalidDate) {
+		t.Fatalf("bad day: %v", err)
+	}
+	outsider := f.user(t, "dora")
+	if _, _, err := f.svc.NextEntry(ctx, g.cal.ID, outsider, "2026-10-24"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("outsider: %v", err)
+	}
+}
+
 func TestEntriesStayInTheirCalendar(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

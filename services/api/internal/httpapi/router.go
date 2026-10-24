@@ -137,6 +137,8 @@ func NewRouter(o Options) (http.Handler, error) {
 				r.Post("/calendars/{calendarID}/transfer", s.handleTransferOwnership)
 				r.Get("/calendars/{calendarID}/entries", s.handleListEntries)
 				r.Post("/calendars/{calendarID}/entries", s.handleCreateEntry)
+				// A static segment, so chi matches it before {entryID}.
+				r.Get("/calendars/{calendarID}/entries/next", s.handleNextEntry)
 				r.Get("/calendars/{calendarID}/entries/{entryID}", s.handleGetEntry)
 				r.Patch("/calendars/{calendarID}/entries/{entryID}", s.handleUpdateEntry)
 				r.Delete("/calendars/{calendarID}/entries/{entryID}", s.handleDeleteEntry)
