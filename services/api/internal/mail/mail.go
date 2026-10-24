@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -72,6 +73,11 @@ func (s *SMTP) Send(ctx context.Context, msg Message) error {
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
 	if err := s.deliver(ctx, msg.To, body); err != nil {
+		// The connection's deadline is the context's, but its timer can fire
+		// first; wait for the context to end too, so the error says why.
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			<-ctx.Done()
+		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			err = ctxErr
 		}
