@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, type ReactNode } from 'react';
-import { Pressable, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -8,6 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,8 @@ type PageProps = {
   back?: { label: string; onPress: () => void };
   /** Shown next to the large title, e.g. a button that adds something. */
   action?: ReactNode;
+  /** A sheet (a modal like "New entry"): on web it rises in on a spring, as native modals do. */
+  sheet?: boolean;
   children: ReactNode;
 };
 
@@ -32,9 +35,10 @@ const COMPACT_HEADER_HEIGHT = 44;
 /**
  * A scrolling screen with an iOS-style large title. Once the large title
  * scrolls away, a compact title with a hairline fades in at the top.
- * Content eases in each time the screen gains focus.
+ * Content eases in each time the screen gains focus; sheets rise in on a
+ * spring on web, where there is no native modal animation.
  */
-export function Page({ title, back, action, children }: PageProps) {
+export function Page({ title, back, action, sheet, children }: PageProps) {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -50,23 +54,29 @@ export function Page({ title, back, action, children }: PageProps) {
     opacity: interpolate(scrollY.value, [24, 44], [0, 1], Extrapolation.CLAMP),
   }));
 
+  const rise = sheet && Platform.OS === 'web';
   const entrance = useSharedValue(1);
   useFocusEffect(
     useCallback(() => {
       if (reduceMotion) return;
-      entrance.value = 0;
-      entrance.value = withTiming(1, { duration: motion.duration.slow, easing: motion.easing });
-    }, [reduceMotion, entrance]),
+      entrance.set(0);
+      entrance.set(
+        rise ? withSpring(1, motion.spring) : withTiming(1, { duration: motion.duration.slow, easing: motion.easing }),
+      );
+    }, [reduceMotion, entrance, rise]),
   );
+  const distance = rise ? 48 : 8;
   const entranceStyle = useAnimatedStyle(() => ({
-    opacity: entrance.value,
-    transform: [{ translateY: (1 - entrance.value) * 8 }],
+    opacity: Math.min(1, entrance.value * (rise ? 2 : 1)),
+    transform: [{ translateY: (1 - entrance.value) * distance }],
   }));
 
   return (
     <View style={styles.root}>
+      {/* Repeats the title for sighted people once it scrolls away; screen readers have the heading. */}
       <Animated.View
         pointerEvents="none"
+        aria-hidden
         style={[
           styles.compactHeader,
           { paddingTop: insets.top, height: insets.top + COMPACT_HEADER_HEIGHT },
@@ -90,6 +100,7 @@ export function Page({ title, back, action, children }: PageProps) {
           {back ? (
             <Pressable
               role="link"
+              aria-label={`Back to ${back.label}`}
               onPress={back.onPress}
               hitSlop={8}
               style={({ pressed }) => [styles.back, pressed && styles.backPressed]}

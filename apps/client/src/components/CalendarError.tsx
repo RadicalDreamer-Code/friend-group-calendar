@@ -1,18 +1,21 @@
 import { router } from 'expo-router';
-import { View } from 'react-native';
 
 import { isCalendarGone } from '@/api/calendars';
-import { errorMessage } from '@/api/client';
-import { createStyles } from '@/theme/ThemeProvider';
-import { space } from '@/theme/tokens';
 
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
-import { Text } from './Text';
+import { ErrorState } from './ErrorState';
 
 /** For calendar screens whose calendar could not be loaded. */
-export function CalendarError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const styles = useStyles();
+export function CalendarError({
+  error,
+  onRetry,
+  retrying,
+}: {
+  error: unknown;
+  onRetry: () => void;
+  retrying?: boolean;
+}) {
   if (isCalendarGone(error)) {
     return (
       <EmptyState
@@ -23,23 +26,5 @@ export function CalendarError({ error, onRetry }: { error: unknown; onRetry: () 
       />
     );
   }
-  return (
-    <View style={styles.root}>
-      <Text tone="secondary" style={styles.message}>
-        {errorMessage(error)}
-      </Text>
-      <Button variant="secondary" title="Try again" onPress={onRetry} />
-    </View>
-  );
+  return <ErrorState error={error} onRetry={onRetry} retrying={retrying} />;
 }
-
-const useStyles = createStyles(() => ({
-  root: {
-    alignItems: 'center',
-    gap: space.lg,
-    paddingVertical: space.xxxl,
-  },
-  message: {
-    textAlign: 'center',
-  },
-}));

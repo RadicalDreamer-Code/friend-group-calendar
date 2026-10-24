@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Android themed icon: one color, the launcher tints it. Days are cut out of the page. -->
+  <defs>
+    <mask id="days">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <circle cx="372" cy="512" r="34" fill="#000000"/>
+      <circle cx="512" cy="512" r="34" fill="#000000"/>
+      <circle cx="652" cy="512" r="34" fill="#000000"/>
+      <circle cx="372" cy="640" r="34" fill="#000000"/>
+      <circle cx="512" cy="640" r="34" fill="#000000"/>
+      <circle cx="652" cy="640" r="34" fill="#000000"/>
+      <rect x="262" y="410" width="500" height="10" fill="#000000"/>
+    </mask>
+  </defs>
+  <g transform="translate(512 512) scale(1.15) translate(-512 -512)" fill="#FFFFFF">
+    <rect x="262" y="290" width="500" height="470" rx="76" mask="url(#days)"/>
+    <rect x="374" y="236" width="44" height="116" rx="22"/>
+    <rect x="606" y="236" width="44" height="116" rx="22"/>
+  </g>
+</svg>

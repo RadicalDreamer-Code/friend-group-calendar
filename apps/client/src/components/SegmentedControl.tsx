@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { haptics } from '@/lib/haptics';
 import { createStyles } from '@/theme/ThemeProvider';
 import { hairline, motion, radius, space } from '@/theme/tokens';
 
@@ -54,7 +55,11 @@ export function SegmentedControl<T extends string>({
           <Pressable
             key={option.value}
             style={styles.segment}
-            onPress={() => onChange(option.value)}
+            onPress={() => {
+              if (selected) return;
+              haptics.selection();
+              onChange(option.value);
+            }}
             role="radio"
             aria-checked={selected}
           >

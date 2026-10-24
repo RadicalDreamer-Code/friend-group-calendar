@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Android adaptive icon foreground: the glyph alone; the launcher adds the background and mask. -->
+  <g transform="translate(512 512) scale(1.15) translate(-512 -512)">
+    <!-- Calendar page -->
+    <rect x="262" y="290" width="500" height="470" rx="76" fill="#FFFFFF"/>
+    <!-- Header band -->
+    <path d="M262 366a76 76 0 0 1 76-76h348a76 76 0 0 1 76 76v52H262z" fill="#DCEAF3"/>
+    <!-- Rings -->
+    <rect x="374" y="236" width="44" height="116" rx="22" fill="#1F5A7E"/>
+    <rect x="606" y="236" width="44" height="116" rx="22" fill="#1F5A7E"/>
+    <!-- Days: muted entry colors, one per friend -->
+    <circle cx="372" cy="512" r="34" fill="#C98B5A"/>
+    <circle cx="512" cy="512" r="34" fill="#D9D6D0"/>
+    <circle cx="652" cy="512" r="34" fill="#7FA383"/>
+    <circle cx="372" cy="640" r="34" fill="#D9D6D0"/>
+    <circle cx="512" cy="640" r="34" fill="#5B9BC4"/>
+    <circle cx="652" cy="640" r="34" fill="#D9D6D0"/>
+  </g>
+</svg>

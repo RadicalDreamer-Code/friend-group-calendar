@@ -1,6 +1,6 @@
 import { focusManager } from '@tanstack/react-query';
 import { useFocusEffect, useIsFocused } from 'expo-router';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { AppState, Platform } from 'react-native';
 
 /**
@@ -36,7 +36,9 @@ type Refreshable = { isStale: boolean; refetch: () => unknown };
 export function useRefreshOnFocus(...queries: Refreshable[]) {
   const first = useRef(true);
   const latest = useRef(queries);
-  latest.current = queries;
+  useEffect(() => {
+    latest.current = queries;
+  });
   useFocusEffect(
     useCallback(() => {
       if (first.current) {

@@ -8,8 +8,12 @@ import { Button } from '@/components/Button';
 import { Page } from '@/components/Page';
 import { Text } from '@/components/Text';
 import { TextField } from '@/components/TextField';
+import { haptics } from '@/lib/haptics';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
+
+export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 export default function NewCalendarScreen() {
   const styles = useStyles();
@@ -17,11 +21,13 @@ export default function NewCalendarScreen() {
   const create = useCreateCalendar();
   const trimmed = name.trim();
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  useEscapeKey(close);
 
   const submit = () => {
     if (trimmed === '' || create.isPending) return;
     create.mutate(trimmed, {
       onSuccess: (calendar) => {
+        haptics.success();
         // Next stop: inviting people, from the new calendar's settings,
         // which lead back to its month view.
         router.dismissTo('/');
@@ -32,7 +38,7 @@ export default function NewCalendarScreen() {
   };
 
   return (
-    <Page title="New calendar">
+    <Page title="New calendar" sheet>
       <Text variant="subhead" tone="secondary" style={styles.intro}>
         You can invite friends once it is created.
       </Text>

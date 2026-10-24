@@ -19,11 +19,14 @@ import { Button } from '@/components/Button';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { confirm } from '@/lib/confirm';
 import { lastActive, monthYear } from '@/lib/format';
 import { createStyles, useTheme, type ThemePreference } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
+
+export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 const themeOptions = [
   { value: 'system', label: 'System' },
@@ -196,12 +199,20 @@ function DevicesSection() {
     if (ok) revokeOthers.mutate();
   };
 
+  if (sessions.isPending) return <SkeletonList title="Devices" rows={2} sublabel />;
+  if (sessions.data === undefined) {
+    return (
+      <ListSection title="Devices" footer={errorMessage(sessions.error)}>
+        <ListRow label="Try again" action="default" onPress={() => sessions.refetch()} disabled={sessions.isFetching} />
+      </ListSection>
+    );
+  }
+
   return (
     <ListSection
       title="Devices"
       footer={error ? errorMessage(error) : 'Devices stay signed in for 90 days after they were last used.'}
     >
-      {sessions.isPending ? <ListRow label="Loading…" /> : null}
       {list.map((s) => (
         <ListRow
           key={s.id}

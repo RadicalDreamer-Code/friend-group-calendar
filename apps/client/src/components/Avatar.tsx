@@ -1,7 +1,7 @@
 import { Image, View } from 'react-native';
 
 import { createStyles } from '@/theme/ThemeProvider';
-import { entryColors, radius } from '@/theme/tokens';
+import { entryColors, entryInk, radius } from '@/theme/tokens';
 
 import { Text } from './Text';
 
@@ -52,7 +52,7 @@ const useStyles = createStyles((c) => ({
     justifyContent: 'center',
   },
   initials: {
-    color: '#FFFFFF',
+    color: entryInk,
     fontWeight: '600',
   },
 }));

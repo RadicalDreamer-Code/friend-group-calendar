@@ -92,6 +92,38 @@ func TestClientIPIgnoresForwardedHeaders(t *testing.T) {
 	}
 }
 
+// Behind a trusted proxy the forwarded client IP counts, but only on
+// requests that actually come from the proxy.
+func TestClientIPFromTrustedProxy(t *testing.T) {
+	h, err := NewRouter(Options{TrustedProxies: []string{"172.28.80.0/24"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := h.(chi.Router)
+	var got string
+	r.Get("/ip", func(w http.ResponseWriter, r *http.Request) {
+		got = middleware.GetClientIP(r.Context())
+	})
+
+	cases := []struct{ remote, xff, want string }{
+		{"172.28.80.3:40000", "198.51.100.7", "198.51.100.7"},
+		// A value the client sent itself sits further left and is not believed.
+		{"172.28.80.3:40000", "1.2.3.4, 198.51.100.7", "198.51.100.7"},
+		// Straight to the API, not through the proxy: the header is ignored.
+		{"203.0.113.9:5555", "1.2.3.4", "203.0.113.9"},
+	}
+	for _, c := range cases {
+		got = ""
+		req := httptest.NewRequest("GET", "/ip", nil)
+		req.RemoteAddr = c.remote
+		req.Header.Set("X-Forwarded-For", c.xff)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+		if got != c.want {
+			t.Errorf("from %s with X-Forwarded-For %q: client IP = %q, want %q", c.remote, c.xff, got, c.want)
+		}
+	}
+}
+
 func TestRateLimitKeyGroupsIPv6By64(t *testing.T) {
 	cases := map[string]string{
 		"203.0.113.7:51000":               "203.0.113.7",

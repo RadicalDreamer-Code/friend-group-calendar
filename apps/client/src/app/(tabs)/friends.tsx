@@ -14,15 +14,19 @@ import {
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
+import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { TextField } from '@/components/TextField';
 import { confirm } from '@/lib/confirm';
 import { monthYear, timeAgo } from '@/lib/format';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
+
+export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 const AVATAR_SIZE = 36;
 // Separators start where the text does, after the avatar.
@@ -75,6 +79,10 @@ function SearchResults({ text }: { text: string }) {
     );
   }
 
+  if (search.isPending && !search.error) {
+    return <SkeletonList title="People" rows={2} leading="avatar" separatorInset={SEPARATOR_INSET} />;
+  }
+
   const results = search.data ?? [];
   const actionError = send.error ?? accept.error;
   const footer = search.error ? errorMessage(search.error) : actionError ? errorMessage(actionError) : undefined;
@@ -96,7 +104,6 @@ function SearchResults({ text }: { text: string }) {
 
   return (
     <ListSection title="People" footer={footer} separatorInset={SEPARATOR_INSET}>
-      {search.isPending && !search.error ? <ListRow label="Searching…" /> : null}
       {!search.isPending && search.settled && results.length === 0 ? (
         <ListRow
           label={`No one found for @${search.query}`}
@@ -124,21 +131,10 @@ function FriendLists() {
   const remove = useRemoveFriend();
 
   if (friends.isPending) {
-    return (
-      <ListSection>
-        <ListRow label="Loading…" />
-      </ListSection>
-    );
+    return <SkeletonList title="Friends" rows={3} leading="avatar" sublabel separatorInset={SEPARATOR_INSET} />;
   }
-  if (friends.isError) {
-    return (
-      <View style={styles.error}>
-        <Text tone="secondary" style={styles.errorText}>
-          {errorMessage(friends.error)}
-        </Text>
-        <Button variant="secondary" title="Try again" onPress={() => friends.refetch()} />
-      </View>
-    );
+  if (friends.data === undefined) {
+    return <ErrorState error={friends.error} onRetry={friends.refetch} retrying={friends.isFetching} />;
   }
 
   const { friends: list, incoming, outgoing } = friends.data;
@@ -170,6 +166,9 @@ function FriendLists() {
 
   return (
     <>
+      {friends.isRefetchError ? (
+        <RefreshError error={friends.error} onRetry={friends.refetch} retrying={friends.isFetching} />
+      ) : null}
       {actionError ? (
         <Text variant="footnote" tone="danger" style={styles.note} aria-live="polite">
           {errorMessage(actionError)}
@@ -263,13 +262,5 @@ const useStyles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-  },
-  error: {
-    alignItems: 'center',
-    gap: space.lg,
-    paddingVertical: space.xxxl,
-  },
-  errorText: {
-    textAlign: 'center',
   },
 }));

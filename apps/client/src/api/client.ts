@@ -82,6 +82,11 @@ export async function unwrap<T>(request: Promise<Result<T>>): Promise<T> {
   );
 }
 
+/** True when the request never got an answer: offline, DNS, the server down. */
+export function isNetworkError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'network';
+}
+
 /** A message to show the user for any error thrown by a query or mutation. */
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;

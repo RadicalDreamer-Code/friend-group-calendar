@@ -6,16 +6,20 @@ import { Button } from '@/components/Button';
 import { Page } from '@/components/Page';
 import { Text } from '@/components/Text';
 import { UsernameForm } from '@/components/UsernameForm';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { createStyles } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
+
+export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 export default function EditUsernameScreen() {
   const styles = useStyles();
   const user = useUser();
   const close = () => (router.canGoBack() ? router.back() : router.replace('/profile'));
+  useEscapeKey(close);
 
   return (
-    <Page title="Username">
+    <Page title="Username" sheet>
       <Text variant="subhead" tone="secondary" style={styles.intro}>
         Friends find and invite you by your username.
       </Text>

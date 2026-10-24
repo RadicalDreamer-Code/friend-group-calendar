@@ -5,7 +5,7 @@ COMPOSE := docker compose
 -include .env
 export
 
-.PHONY: help up down logs ps psql test typecheck gen-api gen-sql reset-db
+.PHONY: help up down logs ps psql test typecheck lint gen-api gen-sql reset-db
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -36,6 +36,9 @@ test: ## Run Go vet and tests (including database tests) inside the api containe
 
 typecheck: ## Type-check the client inside the web container
 	$(COMPOSE) run --rm --no-deps web npx tsc --noEmit
+
+lint: ## ESLint, Prettier and the theme contrast check for the client
+	$(COMPOSE) run --rm --no-deps web sh -c 'npm run lint && npx prettier --check src scripts && npm run check:contrast'
 
 gen-api: ## Regenerate the typed API client from packages/api/openapi.yaml
 	$(COMPOSE) run --rm --no-deps web npm run gen:api

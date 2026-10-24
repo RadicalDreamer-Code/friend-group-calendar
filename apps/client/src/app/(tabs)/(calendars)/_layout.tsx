@@ -1,11 +1,14 @@
 import { Stack } from 'expo-router';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { useTheme } from '@/theme/ThemeProvider';
+
+export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
 // A calendar opened from a link still has the list underneath, so back
 // and pressing the tab again lead there.
 export const unstable_settings = {
-  initialRouteName: 'index',
+  anchor: 'index',
 };
 
 /**
@@ -14,10 +17,12 @@ export const unstable_settings = {
  */
 export default function CalendarsLayout() {
   const { colors } = useTheme();
+  const reduceMotion = useReducedMotion();
   return (
     <Stack
       screenOptions={{
         headerShown: false,
+        animation: reduceMotion ? 'none' : 'default',
         contentStyle: { backgroundColor: colors.background },
       }}
     />

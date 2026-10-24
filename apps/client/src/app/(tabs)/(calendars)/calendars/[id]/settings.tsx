@@ -15,8 +15,10 @@ import { useUser } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
+import { RefreshError } from '@/components/ErrorState';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { Page } from '@/components/Page';
+import { SkeletonList } from '@/components/Skeleton';
 import { Switch } from '@/components/Switch';
 import { TextField } from '@/components/TextField';
 import { confirm } from '@/lib/confirm';
@@ -38,21 +40,22 @@ export default function CalendarSettingsScreen() {
   if (calendar.isPending) {
     return (
       <Page title="Settings" back={back}>
-        <ListSection>
-          <ListRow label="Loading…" />
-        </ListSection>
+        <SkeletonList rows={3} leading="avatar" sublabel separatorInset={SEPARATOR_INSET} />
       </Page>
     );
   }
-  if (calendar.isError) {
+  if (calendar.data === undefined) {
     return (
       <Page title="Settings" back={back}>
-        <CalendarError error={calendar.error} onRetry={() => calendar.refetch()} />
+        <CalendarError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
       </Page>
     );
   }
   return (
     <Page title="Settings" back={back}>
+      {calendar.isRefetchError ? (
+        <RefreshError error={calendar.error} onRetry={calendar.refetch} retrying={calendar.isFetching} />
+      ) : null}
       <Settings calendar={calendar.data} />
     </Page>
   );

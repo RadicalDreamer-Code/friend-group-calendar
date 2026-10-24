@@ -1,0 +1,42 @@
+# HTTPS for the web app and the API. Caddy gets and renews the certificates
+# from Let's Encrypt by itself; DNS for both names must point at this server.
+{
+	email {$ACME_EMAIL}
+}
+
+app.{$DOMAIN} {
+	root * /srv
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Inline styles come from react-native-web; scripts only from this origin.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.{$DOMAIN}; font-src 'self' data:; connect-src 'self' https://api.{$DOMAIN}; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+		-Server
+	}
+
+	# Bundles have a content hash in their name and never change; everything
+	# else (index.html, the manifest, icons) is checked again on each visit.
+	@hashed path /_expo/static/* /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header ?Cache-Control "no-cache"
+
+	# A single-page app: any path that is not a file loads the app, which
+	# routes it (and shows its own not-found screen).
+	try_files {path} /index.html
+	file_server
+}
+
+api.{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# Caddy replaces any X-Forwarded-For the client sent with the real
+	# client address; the API believes it only from Caddy (TRUSTED_PROXIES).
+	reverse_proxy api:8080
+}

@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E4EFF6",
+        "backgroundColor": "#2E78A6",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -25,8 +25,7 @@
       "bundler": "metro",
       "output": "single",
       "name": "Friend Calendar",
-      "shortName": "Calendar",
-      "themeColor": "#FAF9F7",
+      "shortName": "Friend Cal",
       "backgroundColor": "#FAF9F7"
     },
     "plugins": [

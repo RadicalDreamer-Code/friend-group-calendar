@@ -10,8 +10,9 @@ import { clearToken, loadToken } from './token';
  * - signedOut: show the sign-in screens
  * - needsUsername: signed in for the first time; pick a username before anything else
  * - signedIn: the app
+ * - unreachable: the session could not be checked, e.g. offline at startup; nobody is signed out for that
  */
-export type SessionStatus = 'loading' | 'signedOut' | 'needsUsername' | 'signedIn';
+export type SessionStatus = 'loading' | 'signedOut' | 'needsUsername' | 'signedIn' | 'unreachable';
 
 export const meQueryKey = ['me'] as const;
 
@@ -19,6 +20,11 @@ type SessionContextValue = {
   status: SessionStatus;
   /** The signed-in user; null while loading or signed out. */
   user: User | null;
+  /** Why the session could not be checked, when `status` is unreachable. */
+  error: unknown;
+  /** Checks the session again. */
+  retry: () => void;
+  retrying: boolean;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -45,8 +51,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryFn: fetchMe,
     enabled: tokenLoaded,
     staleTime: 5 * 60_000,
-    // A network error must not sign anyone out; keep retrying quietly.
-    retry: (failures, error) => !(error instanceof ApiError && error.status === 401) && failures < 3,
+    // A network error must not sign anyone out. Retry briefly, then offer to try again.
+    retry: (failures, error) => !(error instanceof ApiError && error.status === 401) && failures < 2,
   });
 
   // A session revoked elsewhere (or expired) turns any request into a 401.
@@ -60,10 +66,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const user = me.data ?? null;
   // Keep showing the last known state while offline instead of bouncing to sign-in.
+  // 401s resolve to null above, so an error here means the API could not be asked.
   const status: SessionStatus =
     me.data === undefined
       ? me.isError
-        ? 'signedOut'
+        ? 'unreachable'
         : 'loading'
       : user === null
         ? 'signedOut'
@@ -71,7 +78,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           ? 'needsUsername'
           : 'signedIn';
 
-  const value = useMemo(() => ({ status, user }), [status, user]);
+  const { error, refetch, isFetching: retrying } = me;
+  const value = useMemo(
+    () => ({ status, user, error, retry: () => void refetch(), retrying }),
+    [status, user, error, refetch, retrying],
+  );
   return <SessionContext value={value}>{children}</SessionContext>;
 }
 
