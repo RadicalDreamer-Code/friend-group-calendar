@@ -14,7 +14,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { hairline, layout, motion, space } from '@/theme/tokens';
+import { layout, motion, space } from '@/theme/tokens';
 
 import { Icon } from './Icon';
 import { Text } from './Text';
@@ -83,7 +83,7 @@ export function Page({ title, back, action, sheet, children }: PageProps) {
           compactHeaderStyle,
         ]}
       >
-        <Text variant="headline">{title}</Text>
+        <Text variant="cardTitle">{title}</Text>
       </Animated.View>
       <Animated.ScrollView
         onScroll={onScroll}
@@ -138,8 +138,8 @@ const useStyles = createStyles((c) => ({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.background,
-    borderBottomWidth: hairline,
-    borderBottomColor: c.hairline,
+    borderBottomWidth: 1,
+    borderBottomColor: c.surface,
   },
   scrollContent: {
     paddingBottom: space.xxxl,

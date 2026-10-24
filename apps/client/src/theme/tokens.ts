@@ -84,5 +84,5 @@ export const layout = {
   sidebarWidth: 248,
   /** Readable content width on large screens. */
   contentMaxWidth: 720,
-  tabBarHeight: 52,
+  tabBarHeight: 60,
 } as const;

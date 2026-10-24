@@ -2,7 +2,7 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { Platform, Pressable, TextInput, View } from 'react-native';
 
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { hairline, radius, space, type } from '@/theme/tokens';
+import { radius, space, type } from '@/theme/tokens';
 
 import { Text } from './Text';
 
@@ -31,7 +31,9 @@ export function CodeInput({ value, onChange, length = 6, error, editable = true,
     <Pressable onPress={() => input.current?.focus()} style={styles.root} accessible={false}>
       {Array.from({ length }, (_, i) => (
         <View key={i} style={[styles.box, focused && i === active && styles.boxActive, error && styles.boxError]}>
-          <Text variant="title">{value[i] ?? ''}</Text>
+          <Text variant="title" style={{ fontFamily: type.headline.fontFamily }}>
+            {value[i] ?? ''}
+          </Text>
         </View>
       ))}
       <TextInput
@@ -68,14 +70,13 @@ const useStyles = createStyles((c) => ({
     aspectRatio: 0.82,
     borderRadius: radius.md,
     backgroundColor: c.surface,
-    borderWidth: hairline,
-    borderColor: c.hairline,
+    borderWidth: 2,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   boxActive: {
     borderColor: c.accent,
-    borderWidth: 1.5,
   },
   boxError: {
     borderColor: c.danger,

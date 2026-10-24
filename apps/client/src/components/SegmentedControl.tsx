@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Pressable, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { createStyles } from '@/theme/ThemeProvider';
-import { hairline, motion, radius, space } from '@/theme/tokens';
+import { motion, radius, space } from '@/theme/tokens';
 
 import { Text } from './Text';
 
@@ -17,7 +17,7 @@ type SegmentedControlProps<T extends string> = {
   accessibilityLabel: string;
 };
 
-const PADDING = 2;
+const PADDING = 3;
 
 export function SegmentedControl<T extends string>({
   options,
@@ -37,9 +37,7 @@ export function SegmentedControl<T extends string>({
   const offset = useSharedValue(0);
   useEffect(() => {
     const target = index * segmentWidth;
-    offset.value = reduceMotion
-      ? target
-      : withTiming(target, { duration: motion.duration.base, easing: motion.easing });
+    offset.value = reduceMotion ? target : withSpring(target, motion.press);
   }, [index, segmentWidth, reduceMotion, offset]);
 
   const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
@@ -77,19 +75,22 @@ const useStyles = createStyles((c) => ({
   track: {
     flexDirection: 'row',
     backgroundColor: c.fill,
-    borderRadius: radius.sm + 1,
+    borderRadius: radius.pill,
     padding: PADDING,
-    height: 34,
+    height: 38,
   },
   thumb: {
     position: 'absolute',
     top: PADDING,
     bottom: PADDING,
     left: PADDING,
-    borderRadius: radius.sm - 1,
-    backgroundColor: c.surface,
-    borderWidth: hairline,
-    borderColor: c.hairline,
+    borderRadius: radius.pill,
+    backgroundColor: c.background,
+    shadowColor: '#2B1D14',
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   segment: {
     flex: 1,
@@ -98,6 +99,6 @@ const useStyles = createStyles((c) => ({
     paddingHorizontal: space.sm,
   },
   selectedLabel: {
-    fontWeight: '600',
+    fontWeight: '700',
   },
 }));

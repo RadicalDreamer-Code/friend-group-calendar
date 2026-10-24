@@ -2,7 +2,7 @@ import { View } from 'react-native';
 
 import { errorMessage, isNetworkError } from '@/api/client';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { hairline, radius, space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
@@ -70,10 +70,8 @@ const useStyles = createStyles((c) => ({
     paddingLeft: space.lg,
     paddingRight: space.xs,
     paddingVertical: space.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: c.surface,
-    borderWidth: hairline,
-    borderColor: c.hairline,
   },
   bannerText: {
     flex: 1,

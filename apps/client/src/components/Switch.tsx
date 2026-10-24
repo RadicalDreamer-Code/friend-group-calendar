@@ -8,12 +8,12 @@ type SwitchProps = Omit<RNSwitchProps, 'trackColor' | 'thumbColor'> & {
   label: string;
 };
 
-const THUMB = '#FFFFFF';
+const THUMB = '#FFF8EE';
 // react-native-web colors the thumb of a switch that is on with its own
 // activeThumbColor (teal by default), which React Native's types do not know.
 const webThumb = Platform.OS === 'web' ? ({ activeThumbColor: THUMB } as object) : {};
 
-/** The platform switch in the accent color. */
+/** The platform switch in coral, with a cream thumb. */
 export function Switch({ label, onValueChange, ...props }: SwitchProps) {
   const { colors } = useTheme();
   return (

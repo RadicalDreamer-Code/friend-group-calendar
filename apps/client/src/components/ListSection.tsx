@@ -20,14 +20,14 @@ type ListSectionProps = {
   children: ReactNode;
 };
 
-/** An inset grouped list (like iOS Settings) with hairline separators between rows. */
+/** A soft rounded card holding a group of rows, with faint separators between them. */
 export function ListSection({ title, footer, separatorInset, children }: ListSectionProps) {
   const styles = useStyles();
   const rows = Children.toArray(children);
   return (
     <View style={styles.root}>
       {title ? (
-        <Text variant="footnote" tone="secondary" role="heading" aria-level={2} style={styles.title}>
+        <Text variant="caption" tone="secondary" role="heading" aria-level={2} style={styles.title}>
           {title}
         </Text>
       ) : null}
@@ -135,12 +135,13 @@ const useStyles = createStyles((c) => ({
   title: {
     paddingHorizontal: space.lg,
     marginBottom: space.sm,
+    letterSpacing: 0.8,
+    // In the style, so screen readers still read words rather than letters.
+    textTransform: 'uppercase',
   },
   group: {
     backgroundColor: c.surface,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: c.hairline,
+    borderRadius: radius.lg,
     overflow: 'hidden',
   },
   separator: {
@@ -153,7 +154,7 @@ const useStyles = createStyles((c) => ({
     marginTop: space.sm,
   },
   row: {
-    minHeight: 48,
+    minHeight: 52,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     flexDirection: 'row',

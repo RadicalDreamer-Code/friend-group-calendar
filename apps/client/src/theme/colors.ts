@@ -33,6 +33,8 @@ export type Colors = {
   /** The bottom edge under chunky quiet buttons. */
   fillEdge: string;
   danger: string;
+  /** The bottom edge under chunky destructive buttons. */
+  dangerEdge: string;
   success: string;
   /** The sunset stripes: coral, tangerine and mustard, for markers and arcs. */
   sunset: readonly [string, string, string];
@@ -60,6 +62,7 @@ export const palette: Record<ColorScheme, Colors> = {
     onAccent: '#FFFFFF',
     fillEdge: '#DCC8B1',
     danger: '#B02A22',
+    dangerEdge: '#761B16',
     success: '#3D7036',
     sunset: ['#DC4E2A', tangerine, mustard],
     onSunset: ink,
@@ -79,6 +82,7 @@ export const palette: Record<ColorScheme, Colors> = {
     onAccent: '#1D1611',
     fillEdge: '#120D0A',
     danger: '#F2877C',
+    dangerEdge: '#A3453B',
     success: '#8FC487',
     sunset: ['#E8603A', tangerine, mustard],
     onSunset: ink,
