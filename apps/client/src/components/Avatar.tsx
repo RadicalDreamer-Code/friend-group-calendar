@@ -53,6 +53,6 @@ const useStyles = createStyles((c) => ({
   },
   initials: {
     color: entryInk,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 }));

@@ -5,6 +5,7 @@ import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
 import { Icon } from '../Icon';
+import { SunsetMarker } from '../SunsetMarker';
 import { Text } from '../Text';
 import type { AppTab } from './tabs';
 
@@ -28,7 +29,6 @@ export function NavItem({
   const styles = useStyles();
   const { colors } = useTheme();
   const tint = isFocused ? colors.accent : variant === 'bar' ? colors.textTertiary : colors.textSecondary;
-  // Accent text on the pale sidebar selection is too faint to read, so only the icon is tinted there.
   const labelColor = variant === 'sidebar' && isFocused ? colors.text : tint;
 
   const pressableStyle = ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -49,19 +49,24 @@ export function NavItem({
       style={pressableStyle}
     >
       <View>
-        <Icon name={isFocused ? tab.iconFocused : tab.icon} size={variant === 'bar' ? 24 : 20} color={tint} />
+        <Icon name={isFocused ? tab.iconFocused : tab.icon} size={variant === 'bar' ? 22 : 20} color={tint} />
         {badge > 0 && variant === 'bar' ? <Badge count={badge} style={styles.barBadge} /> : null}
       </View>
-      <Text
-        variant={variant === 'bar' ? 'caption' : 'callout'}
-        style={[
-          { color: labelColor },
-          variant === 'sidebar' && styles.sidebarLabel,
-          variant === 'sidebar' && isFocused && styles.sidebarLabelFocused,
-        ]}
-      >
-        {tab.label}
-      </Text>
+      {variant === 'bar' ? (
+        <>
+          <Text variant="caption" style={{ color: labelColor }}>
+            {tab.label}
+          </Text>
+          <SunsetMarker visible={isFocused} />
+        </>
+      ) : (
+        <View style={styles.sidebarLabel}>
+          <Text variant="callout" style={[{ color: labelColor }, isFocused && styles.sidebarLabelFocused]}>
+            {tab.label}
+          </Text>
+          <SunsetMarker visible={isFocused} />
+        </View>
+      )}
       {badge > 0 && variant === 'sidebar' ? <Badge count={badge} /> : null}
     </Pressable>
   );
@@ -83,28 +88,32 @@ const useStyles = createStyles((c) => ({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space.xxs,
+    gap: 3,
     paddingTop: space.xs,
   },
   sidebar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    height: 40,
+    height: 46,
     paddingHorizontal: space.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
   },
   sidebarFocused: {
-    backgroundColor: c.accentSoft,
+    backgroundColor: c.surface,
   },
   sidebarHovered: {
-    backgroundColor: c.fill,
+    backgroundColor: c.surface,
   },
   sidebarLabel: {
     flex: 1,
+    alignItems: 'flex-start',
+    gap: 3,
+    // The marker hangs below the label without pushing it off-center.
+    marginBottom: -5,
   },
   sidebarLabelFocused: {
-    fontWeight: '600',
+    fontWeight: '700',
   },
   pressed: {
     opacity: 0.6,

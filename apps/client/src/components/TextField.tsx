@@ -2,7 +2,7 @@ import { useState, type ComponentRef, type Ref } from 'react';
 import { TextInput, View, type TextInputProps } from 'react-native';
 
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { hairline, radius, space, type } from '@/theme/tokens';
+import { radius, space, type } from '@/theme/tokens';
 
 import { Text } from './Text';
 
@@ -68,18 +68,18 @@ const useStyles = createStyles((c) => ({
   input: {
     ...type.body,
     color: c.text,
-    height: 50,
+    height: 52,
     paddingHorizontal: space.lg,
     borderRadius: radius.md,
     backgroundColor: c.surface,
-    borderWidth: hairline,
-    borderColor: c.hairline,
+    // Always 2 wide, so focusing does not shift the text.
+    borderWidth: 2,
+    borderColor: 'transparent',
     // Web: the border change below is the focus indicator.
     outlineWidth: 0,
   },
   inputFocused: {
     borderColor: c.accent,
-    borderWidth: 1.5,
   },
   inputError: {
     borderColor: c.danger,

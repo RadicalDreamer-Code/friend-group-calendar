@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useIncomingRequestCount } from '@/api/friends';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { hairline, layout, radius, space } from '@/theme/tokens';
+import { layout, radius, space } from '@/theme/tokens';
 
 import { Icon } from '../Icon';
 import { Text } from '../Text';
@@ -23,7 +23,7 @@ export function Sidebar() {
         <View style={styles.logo}>
           <Icon name="calendar" size={16} color={colors.onAccent} />
         </View>
-        <Text variant="headline">Friend Calendar</Text>
+        <Text variant="cardTitle">Friend Calendar</Text>
       </View>
       <View role="tablist" aria-orientation="vertical" style={styles.items}>
         {appTabs.map((tab) => (
@@ -41,8 +41,8 @@ const useStyles = createStyles((c) => ({
     width: layout.sidebarWidth,
     paddingHorizontal: space.md,
     backgroundColor: c.background,
-    borderRightWidth: hairline,
-    borderRightColor: c.hairline,
+    borderRightWidth: 1,
+    borderRightColor: c.surface,
   },
   brand: {
     flexDirection: 'row',
@@ -52,8 +52,8 @@ const useStyles = createStyles((c) => ({
     marginBottom: space.xl,
   },
   logo: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     borderRadius: radius.sm,
     backgroundColor: c.accent,
     alignItems: 'center',

@@ -5,6 +5,8 @@ import * as Haptics from 'expo-haptics';
  * a nicety, and devices without a motor simply stay still.
  */
 export const haptics = {
+  /** A chunky button sinking under a finger. */
+  press: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}),
   /** A choice changed: a segment, a day, a color, an answer. */
   selection: () => Haptics.selectionAsync().catch(() => {}),
   /** Something was saved or created. */

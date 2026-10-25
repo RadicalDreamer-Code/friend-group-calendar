@@ -86,7 +86,7 @@ const SWATCH_SIZE = 12;
 const useStyles = createStyles((c) => ({
   bone: {
     backgroundColor: c.fill,
-    borderRadius: radius.sm / 2,
+    borderRadius: radius.pill,
   },
   avatar: {
     width: AVATAR_SIZE,

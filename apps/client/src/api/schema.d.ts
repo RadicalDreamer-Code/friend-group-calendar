@@ -476,6 +476,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calendars/{calendarId}/entries/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The next entry from a day on
+         * @description The first entry on or after `from`, for the "Next up" card. Clients send
+         *     their local today, since the server does not know their time zone.
+         *     Error codes: `invalid_date`.
+         */
+        get: operations["getNextEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/calendars/{calendarId}/entries/{entryId}": {
         parameters: {
             query?: never;
@@ -1544,6 +1568,37 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    getNextEntry: {
+        parameters: {
+            query: {
+                /** @description The first day to look at, as YYYY-MM-DD. */
+                from: string;
+            };
+            header?: never;
+            path: {
+                calendarId: components["parameters"]["CalendarId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry, or null when nothing is planned from that day on */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        entry: components["schemas"]["Entry"] | null;
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     getEntry: {

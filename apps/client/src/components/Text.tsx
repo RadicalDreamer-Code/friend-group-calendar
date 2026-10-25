@@ -3,9 +3,9 @@ import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 import { useTheme } from '@/theme/ThemeProvider';
 import { type as typeScale, type Colors, type TypeVariant } from '@/theme/tokens';
 
-type Tone = 'primary' | 'secondary' | 'tertiary' | 'accent' | 'danger' | 'success' | 'onAccent';
+type Tone = 'primary' | 'secondary' | 'tertiary' | 'accent' | 'danger' | 'success' | 'onAccent' | 'onSunset';
 
-const toneColor: Record<Tone, keyof Colors> = {
+const toneColor: Record<Tone, Exclude<keyof Colors, 'sunset'>> = {
   primary: 'text',
   secondary: 'textSecondary',
   tertiary: 'textTertiary',
@@ -13,6 +13,7 @@ const toneColor: Record<Tone, keyof Colors> = {
   danger: 'danger',
   success: 'success',
   onAccent: 'onAccent',
+  onSunset: 'onSunset',
 };
 
 export type TextProps = RNTextProps & {

@@ -26,9 +26,9 @@ export function EmptyState({ icon, title, message, action, compact, tone = 'defa
   return (
     <View style={[styles.root, compact && styles.rootCompact]} role={danger ? 'alert' : undefined}>
       <View style={[styles.badge, danger && styles.badgeDanger]}>
-        <Icon name={icon} size={26} color={danger ? colors.danger : colors.accent} />
+        <Icon name={icon} size={30} color={danger ? colors.danger : colors.accent} />
       </View>
-      <Text variant="headline" style={styles.title}>
+      <Text variant="title" style={styles.title}>
         {title}
       </Text>
       <Text variant="subhead" tone="secondary" style={styles.message}>
@@ -49,8 +49,8 @@ const useStyles = createStyles((c) => ({
     paddingVertical: space.xxl,
   },
   badge: {
-    width: 56,
-    height: 56,
+    width: 72,
+    height: 72,
     borderRadius: radius.pill,
     backgroundColor: c.accentSoft,
     alignItems: 'center',
@@ -62,7 +62,7 @@ const useStyles = createStyles((c) => ({
   },
   title: {
     textAlign: 'center',
-    marginBottom: space.xs,
+    marginBottom: space.sm,
   },
   message: {
     textAlign: 'center',

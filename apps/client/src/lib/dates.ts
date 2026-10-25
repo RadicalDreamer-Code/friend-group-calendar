@@ -97,10 +97,44 @@ export function formatDay(date: string, now = today()): string {
   });
 }
 
+/** Whole days from `now` to `date`: 2 for the day after tomorrow, -1 for yesterday. */
+export function daysFrom(date: string, now = today()): number {
+  // Rounded, since a day with a daylight saving change is 23 or 25 hours long.
+  return Math.round((fromISODate(date).getTime() - fromISODate(now).getTime()) / 86_400_000);
+}
+
+/** "today", "tomorrow", "in 2 days", "yesterday", "3 days ago": for chips and second lines. */
+export function inDays(date: string, now = today()): string {
+  const days = daysFrom(date, now);
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days === -1) return 'yesterday';
+  return days > 0 ? `in ${days} days` : `${-days} days ago`;
+}
+
+/** "Today", "Tomorrow", "2 days to go", "Yesterday", "3 days ago": an entry's countdown. */
+export function countdown(date: string, now = today()): string {
+  const days = daysFrom(date, now);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days === -1) return 'Yesterday';
+  return days > 0 ? `${days} days to go` : `${-days} days ago`;
+}
+
+/** "Sat, Oct 31", with the year when it is not this year. */
+export function formatShortDay(date: string, now = today()): string {
+  const sameYear = date.slice(0, 4) === now.slice(0, 4);
+  return fromISODate(date).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
 /** "Today", "Tomorrow", "Yesterday" or formatDay. */
 export function relativeDay(date: string, now = today()): string {
-  const base = fromISODate(now);
-  const days = Math.round((fromISODate(date).getTime() - base.getTime()) / 86_400_000);
+  const days = daysFrom(date, now);
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   if (days === -1) return 'Yesterday';

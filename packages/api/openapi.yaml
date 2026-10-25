@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Friend Group Calendar API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     HTTP API for the friend group calendar. This file is the contract between
     services/api (Go) and apps/client (TypeScript). After changing it, run
@@ -796,6 +796,47 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+
+  /calendars/{calendarId}/entries/next:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    get:
+      operationId: getNextEntry
+      summary: The next entry from a day on
+      description: |
+        The first entry on or after `from`, for the "Next up" card. Clients send
+        their local today, since the server does not know their time zone.
+        Error codes: `invalid_date`.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: The first day to look at, as YYYY-MM-DD.
+          schema:
+            type: string
+            format: date
+            example: "2026-10-24"
+      responses:
+        "200":
+          description: The entry, or null when nothing is planned from that day on
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entry]
+                properties:
+                  entry:
+                    oneOf:
+                      - $ref: "#/components/schemas/Entry"
+                      - type: "null"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
 
   /calendars/{calendarId}/entries/{entryId}:

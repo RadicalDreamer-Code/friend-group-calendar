@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useIncomingRequestCount } from '@/api/friends';
 import { createStyles } from '@/theme/ThemeProvider';
-import { hairline, layout } from '@/theme/tokens';
+import { layout } from '@/theme/tokens';
 
 import { NavItem } from './NavItem';
 import { appTabs } from './tabs';
@@ -32,7 +32,7 @@ const useStyles = createStyles((c) => ({
   root: {
     flexDirection: 'row',
     backgroundColor: c.background,
-    borderTopWidth: hairline,
-    borderTopColor: c.hairline,
+    borderTopWidth: 1,
+    borderTopColor: c.surface,
   },
 }));

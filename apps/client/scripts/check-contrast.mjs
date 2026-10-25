@@ -17,7 +17,10 @@ const pairs = [
   ['textTertiary', 'surface', TEXT, 'placeholders, quiet row text'],
   ['accent', 'background', TEXT, 'links, back buttons, today'],
   ['accent', 'surface', TEXT, 'action rows, plain buttons'],
-  ['onAccent', 'accent', TEXT, 'primary buttons, selected today'],
+  ['accent', 'accentSoft', TEXT, 'selected sidebar item, badges'],
+  ['text', 'accentSoft', TEXT, 'selected sidebar label'],
+  ['onAccent', 'accent', TEXT, 'primary buttons'],
+  ['onAccent', 'accentPressed', TEXT, 'primary buttons while pressed'],
   ['onAccent', 'danger', TEXT, 'destructive primary buttons'],
   ['danger', 'background', TEXT, 'error messages'],
   ['danger', 'surface', TEXT, 'destructive rows'],
@@ -29,6 +32,14 @@ const pairs = [
   ['accent', 'background', GRAPHIC, 'keyboard focus ring'],
   ['textTertiary', 'background', GRAPHIC, 'inactive tab icons'],
   ['textTertiary', 'surface', GRAPHIC, 'switch track when off'],
+  ['textTertiary', 'fill', TEXT, 'placeholders in fields on cards'],
+  ['accent', 'fill', GRAPHIC, 'focused field border'],
+];
+
+// The sunset stripes, by index: [foreground, background index, minimum, where].
+const sunsetPairs = [
+  ['onSunset', 2, TEXT, 'countdown chips on covers (mustard)'],
+  ['onSunset', 1, TEXT, 'tangerine chips'],
 ];
 
 function luminance(hex) {
@@ -55,6 +66,11 @@ for (const [scheme, colors] of Object.entries(palette)) {
     check(`${scheme} ${fg} on ${bg} (${where})`, colors[fg], colors[bg], min);
   }
 }
+for (const [scheme, colors] of Object.entries(palette)) {
+  for (const [fg, i, min, where] of sunsetPairs) {
+    check(`${scheme} ${fg} on sunset[${i}] (${where})`, colors[fg], colors.sunset[i], min);
+  }
+}
 for (const { id, value } of entryColors) {
   check(`initials and checkmarks on ${id}`, entryInk, value, TEXT);
 }
@@ -63,4 +79,5 @@ if (failures.length > 0) {
   console.error(`Contrast too low:\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log(`Contrast OK: ${pairs.length * Object.keys(palette).length + entryColors.length} pairs pass WCAG AA.`);
+const total = (pairs.length + sunsetPairs.length) * Object.keys(palette).length + entryColors.length;
+console.log(`Contrast OK: ${total} pairs pass WCAG AA.`);

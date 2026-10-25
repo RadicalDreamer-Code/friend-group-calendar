@@ -64,6 +64,30 @@ func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+type nextEntryResponse struct {
+	// Entry is null when nothing is planned from that day on.
+	Entry *entryResponse `json:"entry"`
+}
+
+// handleNextEntry returns the first entry on or after ?from=YYYY-MM-DD.
+func (s *Server) handleNextEntry(w http.ResponseWriter, r *http.Request) {
+	p := mustPrincipal(r.Context())
+	id, ok := calendarIDParam(w, r)
+	if !ok {
+		return
+	}
+	e, found, err := s.calendars.NextEntry(r.Context(), id, p.User.ID, r.URL.Query().Get("from"))
+	if !writeEntryError(w, r, err) {
+		return
+	}
+	var resp nextEntryResponse
+	if found {
+		entry := s.entryResponse(e)
+		resp.Entry = &entry
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 type createEntryRequest struct {
 	Title string `json:"title"`
 	Date  string `json:"date"`

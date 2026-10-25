@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#2E78A6",
+        "backgroundColor": "#DC4E2A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -26,7 +26,7 @@
       "output": "single",
       "name": "Friend Calendar",
       "shortName": "Friend Cal",
-      "backgroundColor": "#FAF9F7"
+      "backgroundColor": "#FFFFFF"
     },
     "plugins": [
       "expo-router",
@@ -39,10 +39,11 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "friendcal",
-    "backgroundColor": "#FAF9F7",
+    "backgroundColor": "#FFFFFF",
     "experiments": {
       "typedRoutes": true
     }

@@ -298,6 +298,53 @@ func (q *Queries) ListEntryResponses(ctx context.Context, entryIds []uuid.UUID) 
 	return items, nil
 }
 
+const nextEntry = `-- name: NextEntry :one
+SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+       COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
+FROM entries e
+LEFT JOIN users u ON u.id = e.created_by
+WHERE e.calendar_id = $1 AND e.day >= $2
+ORDER BY e.day, e.created_at, e.id
+LIMIT 1
+`
+
+type NextEntryParams struct {
+	CalendarID uuid.UUID `json:"calendar_id"`
+	FromDay    time.Time `json:"from_day"`
+}
+
+type NextEntryRow struct {
+	ID               uuid.UUID  `json:"id"`
+	CalendarID       uuid.UUID  `json:"calendar_id"`
+	Title            string     `json:"title"`
+	Day              time.Time  `json:"day"`
+	Color            string     `json:"color"`
+	CreatedBy        *uuid.UUID `json:"created_by"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CreatorUsername  string     `json:"creator_username"`
+	CreatorAvatarKey *string    `json:"creator_avatar_key"`
+}
+
+// The first entry on or after `from_day`, by day and then in the order they were added.
+func (q *Queries) NextEntry(ctx context.Context, arg NextEntryParams) (NextEntryRow, error) {
+	row := q.db.QueryRow(ctx, nextEntry, arg.CalendarID, arg.FromDay)
+	var i NextEntryRow
+	err := row.Scan(
+		&i.ID,
+		&i.CalendarID,
+		&i.Title,
+		&i.Day,
+		&i.Color,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatorUsername,
+		&i.CreatorAvatarKey,
+	)
+	return i, err
+}
+
 const setEntryResponse = `-- name: SetEntryResponse :exec
 INSERT INTO entry_responses (entry_id, user_id, status)
 VALUES ($1, $2, $3)
