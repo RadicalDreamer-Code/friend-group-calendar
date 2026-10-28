@@ -7,6 +7,7 @@ import { type Calendar, type Entry } from '@/api/client';
 import { replyOf, useMonthEntries } from '@/api/entries';
 import { useUser } from '@/auth/session';
 import { CalendarError } from '@/components/CalendarError';
+import { CardRow } from '@/components/CardRow';
 import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
 import { Icon } from '@/components/Icon';
@@ -16,7 +17,7 @@ import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
 import { Springy } from '@/components/Springy';
 import { Text } from '@/components/Text';
-import { formatDay, inDays, isISODate, monthOf, relativeDay, today } from '@/lib/dates';
+import { capitalize, formatDay, inDays, isISODate, monthOf, relativeDay, today } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { goBack } from '@/lib/navigation';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
@@ -168,20 +169,15 @@ function DayEntries({
 /** One plan on the selected day: a soft card with its color tile, title and countdown. */
 function EntryCard({ calendarId, entry, me }: { calendarId: string; entry: Entry; me: string }) {
   const styles = useStyles();
-  const { colors } = useTheme();
   const summary = `${capitalize(inDays(entry.date))} · ${answerSummary(entry, me)}`;
   return (
-    <Springy
+    <CardRow
       role="button"
       aria-label={`${entry.title}, ${summary}`}
       onPress={() =>
         router.push({ pathname: '/calendars/[id]/entries/[entryId]', params: { id: calendarId, entryId: entry.id } })
       }
-      scaleTo={0.98}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.card,
-        (pressed || hovered) && styles.cardPressed,
-      ]}
+      style={styles.card}
     >
       <View style={[styles.tile, { backgroundColor: entryColor(entry.color) }]} aria-hidden>
         <Icon name="sparkles" size={20} color={entryInk} />
@@ -194,8 +190,7 @@ function EntryCard({ calendarId, entry, me }: { calendarId: string; entry: Entry
           {summary}
         </Text>
       </View>
-      <Icon name="chevron-forward" size={18} color={colors.textTertiary} />
-    </Springy>
+    </CardRow>
   );
 }
 
@@ -237,8 +232,6 @@ function AddCard({ empty, onAdd }: { empty: boolean; onAdd?: () => void }) {
   );
 }
 
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
 /** "You’re going", "You + 2 going", "You declined · 3 going", "3 going", "No answers yet". */
 function answerSummary(entry: Entry, userId: string): string {
   const going = entry.accepted.length;
@@ -270,15 +263,10 @@ const useStyles = createStyles((c) => ({
     textTransform: 'uppercase',
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
     paddingVertical: space.sm + 2,
     paddingLeft: space.sm + 2,
-    paddingRight: space.md,
   },
+  /** The add card's pressed fill, as on CardRow. */
   cardPressed: {
     backgroundColor: c.fill,
   },

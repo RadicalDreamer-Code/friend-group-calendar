@@ -207,13 +207,17 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, co
   const { colors } = useTheme();
   const count = dayColors?.length ?? 0;
 
-  // The ink circle pops in on the newly selected day.
+  // The ink circle pops in on the newly selected day, not on a day that is
+  // selected when the month appears.
   const reduceMotion = useReducedMotion();
   const pop = useSharedValue(1);
+  const wasSelected = useRef(isSelected);
   useEffect(() => {
-    if (!isSelected || reduceMotion) return;
-    pop.set(0.7);
-    pop.set(withSpring(1, motion.press));
+    if (isSelected && !wasSelected.current && !reduceMotion) {
+      pop.set(0.7);
+      pop.set(withSpring(1, motion.press));
+    }
+    wasSelected.current = isSelected;
   }, [isSelected, reduceMotion, pop]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const label = [

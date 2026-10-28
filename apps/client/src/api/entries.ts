@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { monthOf, today } from '@/lib/dates';
-import { usePollWhileFocused } from '@/lib/freshness';
+import { monthOf } from '@/lib/dates';
+import { usePollWhileFocused, useToday } from '@/lib/freshness';
 
 import { calendarQueryKey, isCalendarGone } from './calendars';
 import { api, ApiError, unwrap, type Entry, type EntryColor, type EntryResponseStatus } from './client';
@@ -62,10 +62,11 @@ export function useMonthEntries(calendarId: string, month: string) {
 /**
  * The first entry from today on (the device's today), or null when nothing
  * is planned. Polled while the screen is focused, unless `poll` is false
- * (the calendars list, which shows one per calendar).
+ * (the calendars list, which shows one per calendar). Asks again for the
+ * new day at midnight.
  */
 export function useNextEntry(calendarId: string, { poll = true } = {}) {
-  const from = today();
+  const from = useToday();
   const pollWhileFocused = usePollWhileFocused();
   return useQuery({
     queryKey: nextQueryKey(calendarId, from),
@@ -77,6 +78,10 @@ export function useNextEntry(calendarId: string, { poll = true } = {}) {
           }),
         )
       ).entry,
+    // On a new day the key changes; keep showing the last answer until the
+    // new one arrives, so the card doesn't blink out, unless that entry is
+    // now in the past.
+    placeholderData: (previous) => (previous && previous.date < from ? undefined : previous),
     refetchInterval: poll ? pollWhileFocused : false,
     retry: (failures, error) => !isCalendarGone(error) && failures < 1,
   });
@@ -144,8 +149,9 @@ function dropEntry(queryClient: QueryClient, calendarId: string, entryId: string
 }
 
 /**
- * Shows a changed (or, with null, deleted) entry in the Next up card right
- * away, then asks the server again: another entry may be next now.
+ * Shows a changed entry in the Next up card right away, or for a deleted one
+ * (null) the entry after it, then asks the server again: another entry may
+ * be next now.
  */
 function updateNext(
   queryClient: QueryClient,
@@ -155,18 +161,30 @@ function updateNext(
   refetch = true,
 ) {
   for (const [key, next] of queryClient.getQueriesData<Entry | null>({ queryKey: nextQueryKey(calendarId) })) {
-    if (next?.id === entryId) queryClient.setQueryData(key, entry);
+    if (next?.id === entryId) queryClient.setQueryData(key, entry ?? nextInMonth(queryClient, calendarId, next));
   }
   // Not while an answer is still on its way: the refetch would bring back the old one.
   if (refetch) queryClient.invalidateQueries({ queryKey: nextQueryKey(calendarId) });
 }
 
+/**
+ * The entry after a deleted next one, as far as its month in the cache knows,
+ * so the card does not disappear until the refetch brings it.
+ */
+function nextInMonth(queryClient: QueryClient, calendarId: string, gone: Entry): Entry | null {
+  const month = queryClient.getQueryData<Entry[]>(monthQueryKey(calendarId, monthOf(gone.date)));
+  return month?.filter((e) => e.id !== gone.id && byDay(e, gone) > 0).sort(byDay)[0] ?? null;
+}
+
 /** After a failed change the cached entries may be wrong, so they are refetched. */
 function refetchAfterError(queryClient: QueryClient, calendarId: string, error: unknown) {
   // A calendar that is gone also drops its entries, which share the key prefix.
-  return queryClient.invalidateQueries({
-    queryKey: isCalendarGone(error) ? calendarQueryKey(calendarId) : entriesQueryKey(calendarId),
-  });
+  if (isCalendarGone(error)) return queryClient.invalidateQueries({ queryKey: calendarQueryKey(calendarId) });
+  // The Next up card may hold an answer shown before it failed.
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: entriesQueryKey(calendarId) }),
+    queryClient.invalidateQueries({ queryKey: nextQueryKey(calendarId) }),
+  ]);
 }
 
 export type EntryFields = { title: string; date: string; color: EntryColor };

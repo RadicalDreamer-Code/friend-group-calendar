@@ -6,18 +6,18 @@ import type { CalendarSummary } from '@/api/client';
 import { useNextEntry } from '@/api/entries';
 import { AvatarStack } from '@/components/AvatarStack';
 import { Button } from '@/components/Button';
+import { CardRow } from '@/components/CardRow';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
-import { Springy } from '@/components/Springy';
 import { Text } from '@/components/Text';
 import { formatShortDay } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { radius, space } from '@/theme/tokens';
+import { space } from '@/theme/tokens';
 
 export default function CalendarsScreen() {
   const calendars = useCalendars();
@@ -79,15 +79,11 @@ function CalendarCard({ calendar }: { calendar: CalendarSummary }) {
   const upcoming = next.data ? `${formatShortDay(next.data.date)} · ${next.data.title}` : null;
 
   return (
-    <Springy
+    <CardRow
       role="link"
       aria-label={[calendar.name, members, upcoming ? `Next: ${upcoming}` : null].filter(Boolean).join(', ')}
       onPress={() => router.push({ pathname: '/calendars/[id]', params: { id: calendar.id } })}
-      scaleTo={0.98}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.card,
-        (pressed || hovered) && styles.cardPressed,
-      ]}
+      style={styles.card}
     >
       <View style={styles.cardText}>
         <Text variant="cardTitle" numberOfLines={1}>
@@ -106,28 +102,18 @@ function CalendarCard({ calendar }: { calendar: CalendarSummary }) {
         ) : null}
       </View>
       <AvatarStack people={calendar.members} total={calendar.memberCount} />
-      <Icon name="chevron-forward" size={18} color={colors.textTertiary} />
-    </Springy>
+    </CardRow>
   );
 }
 
-const useStyles = createStyles((c) => ({
+const useStyles = createStyles(() => ({
   list: {
     marginTop: space.lg,
     gap: space.md,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
     paddingVertical: space.lg,
     paddingLeft: space.lg + space.xxs,
-    paddingRight: space.md,
-  },
-  cardPressed: {
-    backgroundColor: c.fill,
   },
   cardText: {
     flex: 1,
