@@ -20,18 +20,23 @@ import {
   today as getToday,
   weekdayNames,
 } from '@/lib/dates';
+import type { EntryCover } from '@/api/client';
 import { haptics } from '@/lib/haptics';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { motion, radius, space } from '@/theme/tokens';
 
 import { Button } from './Button';
+import { CoverIcon } from './CoverIcon';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
-/** Most dots one day shows; more entries still show as three. */
-const MAX_DOTS = 3;
+/** Most marks one day shows; more entries still show as three. */
+const MAX_MARKS = 3;
 /** How far a swipe has to travel to change the month. */
 const SWIPE_DISTANCE = 40;
+
+/** One entry under a day number: its cover icon in its color, or a dot without a cover. */
+export type DayMark = { color: string; cover: EntryCover | null };
 
 type MonthCalendarProps = {
   /** The month shown, YYYY-MM. */
@@ -40,8 +45,8 @@ type MonthCalendarProps = {
   /** The selected day, YYYY-MM-DD. */
   selected: string | null;
   onSelect: (date: string) => void;
-  /** Entry colors per day, drawn as dots under the day number. */
-  dots?: Record<string, string[]>;
+  /** Entries per day, marked under the day number. */
+  marks?: Record<string, DayMark[]>;
   /** Smaller cells, for picking a date in a form. */
   compact?: boolean;
 };
@@ -50,7 +55,7 @@ type MonthCalendarProps = {
  * A month grid: arrows or a sideways swipe change the month, today is in
  * coral and the selected day is an ink circle that springs in.
  */
-export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, compact }: MonthCalendarProps) {
+export function MonthCalendar({ month, onMonthChange, selected, onSelect, marks, compact }: MonthCalendarProps) {
   const styles = useStyles();
   const today = getToday();
   const canGoBack = month > firstMonth;
@@ -131,7 +136,7 @@ export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, 
             today={today}
             selected={selected}
             onSelect={onSelect}
-            dots={dots}
+            marks={marks}
             compact={compact ?? false}
           />
         </Animated.View>
@@ -158,11 +163,11 @@ type DaysProps = {
   today: string;
   selected: string | null;
   onSelect: (date: string) => void;
-  dots?: Record<string, string[]>;
+  marks?: Record<string, DayMark[]>;
   compact: boolean;
 };
 
-function Days({ month, today, selected, onSelect, dots, compact }: DaysProps) {
+function Days({ month, today, selected, onSelect, marks, compact }: DaysProps) {
   const styles = useStyles();
   const cells: (string | null)[] = [...Array<null>(leadingBlanks(month)).fill(null), ...daysOfMonth(month)];
   while (cells.length % 7 !== 0) cells.push(null);
@@ -179,7 +184,7 @@ function Days({ month, today, selected, onSelect, dots, compact }: DaysProps) {
                 date={date}
                 isToday={date === today}
                 isSelected={date === selected}
-                colors={dots?.[date]}
+                marks={marks?.[date]}
                 compact={compact}
                 onSelect={onSelect}
               />
@@ -197,15 +202,15 @@ type DayProps = {
   date: string;
   isToday: boolean;
   isSelected: boolean;
-  colors?: string[];
+  marks?: DayMark[];
   compact: boolean;
   onSelect: (date: string) => void;
 };
 
-const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, compact, onSelect }: DayProps) {
+const Day = memo(function Day({ date, isToday, isSelected, marks, compact, onSelect }: DayProps) {
   const styles = useStyles();
   const { colors } = useTheme();
-  const count = dayColors?.length ?? 0;
+  const count = marks?.length ?? 0;
 
   // The ink circle pops in on the newly selected day, not on a day that is
   // selected when the month appears.
@@ -260,10 +265,16 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, co
             </Text>
           </Animated.View>
           {compact ? null : (
-            <View style={styles.dots}>
-              {dayColors?.slice(0, MAX_DOTS).map((c, i) => (
-                <View key={i} style={[styles.dot, { backgroundColor: c }]} />
-              ))}
+            <View style={styles.marks}>
+              {marks
+                ?.slice(0, MAX_MARKS)
+                .map((m, i) =>
+                  m.cover ? (
+                    <CoverIcon key={i} cover={m.cover} size={MARK_SIZE} color={m.color} />
+                  ) : (
+                    <View key={i} style={[styles.dot, { backgroundColor: m.color }]} />
+                  ),
+                )}
             </View>
           )}
         </>
@@ -275,6 +286,7 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, co
 const NUMBER_SIZE = 36;
 const NUMBER_SIZE_COMPACT = 32;
 const DOT_SIZE = 6;
+const MARK_SIZE = 11;
 
 const useStyles = createStyles((c) => ({
   header: {
@@ -329,11 +341,12 @@ const useStyles = createStyles((c) => ({
   numberEmphasis: {
     fontWeight: '800',
   },
-  dots: {
+  marks: {
     flexDirection: 'row',
-    gap: 3,
-    height: DOT_SIZE,
-    marginTop: 3,
+    alignItems: 'center',
+    gap: 2,
+    height: MARK_SIZE,
+    marginTop: 2,
   },
   dot: {
     width: DOT_SIZE,

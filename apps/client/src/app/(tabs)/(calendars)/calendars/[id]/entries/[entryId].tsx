@@ -12,13 +12,14 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { canEditEntries, useCalendar } from '@/api/calendars';
-import { errorMessage, type Calendar, type CalendarMember, type Entry } from '@/api/client';
+import { errorMessage, type Calendar, type CalendarMember, type Entry, type EntryCover } from '@/api/client';
 import { isEntryGone, replyOf, useEntry, useRespond, type Reply } from '@/api/entries';
 import { useUser } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
 import { Cover } from '@/components/Cover';
+import { CoverIcon } from '@/components/CoverIcon';
 import { EmptyState } from '@/components/EmptyState';
 import { RefreshError } from '@/components/ErrorState';
 import { Icon } from '@/components/Icon';
@@ -149,6 +150,7 @@ function Details({
         <View style={styles.inner}>
           <Cover
             color={entryColor(entry.color)}
+            cover={entry.cover}
             sunAt={0.66}
             style={[styles.cover, { height: COVER_HEIGHT + (wide ? 0 : insets.top) }, wide && styles.coverWide]}
           >
@@ -168,7 +170,7 @@ function Details({
             {refreshError ? <RefreshError error={refreshError} onRetry={onRetry} retrying={retrying} /> : null}
 
             <View style={styles.countdown}>
-              <CountdownTile color={entryColor(entry.color)} jig={mine === 'accepted'} />
+              <CountdownTile color={entryColor(entry.color)} cover={entry.cover} jig={mine === 'accepted'} />
               <View style={styles.countdownText}>
                 <Text variant="title">{countdown(entry.date)}</Text>
                 <Text variant="footnote" tone="secondary">
@@ -263,8 +265,8 @@ function FloatingButton({
   );
 }
 
-/** The entry's color tile beside the countdown; it does a little jig when you say you're in. */
-function CountdownTile({ color, jig }: { color: string; jig: boolean }) {
+/** The entry's color tile with its cover icon beside the countdown; it does a little jig when you say you're in. */
+function CountdownTile({ color, cover, jig }: { color: string; cover: EntryCover | null; jig: boolean }) {
   const styles = useStyles();
   const reduceMotion = useReducedMotion();
   const tilt = useSharedValue(0);
@@ -292,7 +294,11 @@ function CountdownTile({ color, jig }: { color: string; jig: boolean }) {
   }));
   return (
     <Animated.View style={[styles.tile, { backgroundColor: color }, style]} aria-hidden>
-      <Icon name="sparkles" size={24} color={entryInk} />
+      {cover ? (
+        <CoverIcon cover={cover} size={26} color={entryInk} />
+      ) : (
+        <Icon name="sparkles" size={24} color={entryInk} />
+      )}
     </Animated.View>
   );
 }
