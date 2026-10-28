@@ -78,6 +78,10 @@ export function useNextEntry(calendarId: string, { poll = true } = {}) {
           }),
         )
       ).entry,
+    // On a new day the key changes; keep showing the last answer until the
+    // new one arrives, so the card doesn't blink out, unless that entry is
+    // now in the past.
+    placeholderData: (previous) => (previous && previous.date < from ? undefined : previous),
     refetchInterval: poll ? pollWhileFocused : false,
     retry: (failures, error) => !isCalendarGone(error) && failures < 1,
   });

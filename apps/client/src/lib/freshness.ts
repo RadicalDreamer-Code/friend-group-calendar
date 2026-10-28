@@ -52,6 +52,9 @@ export function useRefreshOnFocus(...queries: Refreshable[]) {
   );
 }
 
+/** How often useToday looks again at the latest, in case the clock or time zone changed. */
+const DAY_CHECK_MAX_MS = 60 * 60 * 1000;
+
 /**
  * The device's today as YYYY-MM-DD, re-rendering when the day changes: at
  * midnight, and when the app comes back after a night in the background
@@ -60,18 +63,28 @@ export function useRefreshOnFocus(...queries: Refreshable[]) {
 export function useToday(): string {
   const [day, setDay] = useState(today);
   useEffect(() => {
-    const check = () => setDay(today());
-    const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    // A second late, so today() is surely the new day.
-    const timer = setTimeout(check, midnight.getTime() - now.getTime() + 1000);
+    let timer: ReturnType<typeof setTimeout>;
+    // Looks again just after the next midnight, or within the hour: a clock
+    // or time zone change moves midnight, so a check can still find the same
+    // day, and the next one has to be scheduled either way.
+    const schedule = () => {
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      // A second late, so today() is surely the new day.
+      const delay = Math.min(midnight.getTime() - now.getTime() + 1000, DAY_CHECK_MAX_MS);
+      timer = setTimeout(() => {
+        setDay(today());
+        schedule();
+      }, delay);
+    };
+    schedule();
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') check();
+      if (state === 'active') setDay(today());
     });
     return () => {
       clearTimeout(timer);
       subscription.remove();
     };
-  }, [day]);
+  }, []);
   return day;
 }
