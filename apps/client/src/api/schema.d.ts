@@ -471,8 +471,9 @@ export interface paths {
         /**
          * Add an entry (owner and editors)
          * @description Error codes: `invalid_title`, `invalid_date`, `invalid_end_date` (before the
-         *     start date, or more than 31 days long), `invalid_color`, `forbidden`,
-         *     `day_full` (20 entries on one of its days), `too_many_entries` (5000 in the calendar).
+         *     start date, or more than 31 days long), `invalid_color`, `invalid_cover`,
+         *     `forbidden`, `day_full` (20 entries on one of its days), `too_many_entries`
+         *     (5000 in the calendar).
          */
         post: operations["createEntry"];
         delete?: never;
@@ -712,6 +713,11 @@ export interface components {
          * @enum {string}
          */
         EntryColor: "fjord" | "sage" | "clay" | "rose" | "plum" | "sand" | "moss" | "slate";
+        /**
+         * @description One of the cover scenes. The client draws them; there are no uploads.
+         * @enum {string}
+         */
+        EntryCover: "lake" | "mountains" | "beach" | "city" | "night_out" | "dinner" | "game_night";
         /** @enum {string} */
         EntryResponseStatus: "accepted" | "declined";
         Entry: {
@@ -721,6 +727,8 @@ export interface components {
             date: components["schemas"]["EntryDate"];
             endDate: components["schemas"]["EntryEndDate"];
             color: components["schemas"]["EntryColor"];
+            /** @description The cover scene; null for none. */
+            cover: components["schemas"]["EntryCover"] | null;
             /** @description Who added it; null once their account is deleted. */
             createdBy: components["schemas"]["Person"] | null;
             /** Format: date-time */
@@ -1565,6 +1573,8 @@ export interface operations {
                     date: components["schemas"]["EntryDate"];
                     endDate?: components["schemas"]["EntryEndDate"];
                     color: components["schemas"]["EntryColor"];
+                    /** @description Null or left out for no cover. */
+                    cover?: components["schemas"]["EntryCover"] | null;
                 };
             };
         };
@@ -1683,6 +1693,8 @@ export interface operations {
                     date?: components["schemas"]["EntryDate"];
                     endDate?: components["schemas"]["EntryEndDate"];
                     color?: components["schemas"]["EntryColor"];
+                    /** @description Null removes the cover; left out, it stays. */
+                    cover?: components["schemas"]["EntryCover"] | null;
                 };
             };
         };

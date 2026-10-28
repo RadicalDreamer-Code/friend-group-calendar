@@ -37,6 +37,7 @@ type Entry struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	EndDay     time.Time  `json:"end_day"`
+	Cover      *string    `json:"cover"`
 }
 
 type EntryResponse struct {

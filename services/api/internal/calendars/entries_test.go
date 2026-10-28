@@ -65,6 +65,12 @@ func TestParseEntryInput(t *testing.T) {
 	if _, err := parseColor("red"); !errors.Is(err, ErrInvalidColor) {
 		t.Errorf("parseColor(red) = %v", err)
 	}
+	if c, err := parseCover(""); c != nil || err != nil {
+		t.Errorf("parseCover() = %v, %v", c, err)
+	}
+	if _, err := parseCover("forest"); !errors.Is(err, ErrInvalidCover) {
+		t.Errorf("parseCover(forest) = %v", err)
+	}
 }
 
 // group is a calendar owned by ada with bob as editor and carla as viewer.
@@ -309,6 +315,68 @@ func TestMultiDayEntryValidation(t *testing.T) {
 	}
 	if _, err := f.db.Exec(ctx, "UPDATE entries SET end_day = day + 31 WHERE id = $1", trip.ID); err == nil {
 		t.Fatal("32-day entry was stored")
+	}
+}
+
+func TestEntryCovers(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+
+	if e := f.entry(t, g, g.ada, "Dinner", "2026-10-01"); e.Cover != "" {
+		t.Fatalf("no cover = %q", e.Cover)
+	}
+	for _, cover := range Covers {
+		in := EntryInput{Title: "x", Date: "2026-10-02", Color: "sage", Cover: cover}
+		if e, err := f.svc.CreateEntry(ctx, g.cal.ID, g.ada, in); err != nil || e.Cover != cover {
+			t.Fatalf("cover %s = %+v, %v", cover, e, err)
+		}
+	}
+	for _, bad := range []string{"forest", "Lake", "night out"} {
+		in := EntryInput{Title: "x", Date: "2026-10-03", Color: "sage", Cover: bad}
+		if _, err := f.svc.CreateEntry(ctx, g.cal.ID, g.ada, in); !errors.Is(err, ErrInvalidCover) {
+			t.Fatalf("cover %q: %v", bad, err)
+		}
+	}
+
+	in := EntryInput{Title: "Swim", Date: "2026-10-04", Color: "sage", Cover: "lake"}
+	e, err := f.svc.CreateEntry(ctx, g.cal.ID, g.ada, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Respond(ctx, g.cal.ID, g.carla, e.ID, ReplyAccepted); err != nil {
+		t.Fatal(err)
+	}
+	if list, err := f.svc.ListEntries(ctx, g.cal.ID, g.carla, "2026-10"); err != nil || list[len(list)-1].Cover != "lake" {
+		t.Fatalf("listed = %+v, %v", list, err)
+	}
+
+	// Changing other fields keeps the cover, and a new cover keeps the answers.
+	title := "Swim and sauna"
+	if e, err = f.svc.UpdateEntry(ctx, g.cal.ID, g.bob, e.ID, EntryChanges{Title: &title}); err != nil || e.Cover != "lake" {
+		t.Fatalf("after renaming = %+v, %v", e, err)
+	}
+	cover := "beach"
+	if e, err = f.svc.UpdateEntry(ctx, g.cal.ID, g.bob, e.ID, EntryChanges{Cover: &cover}); err != nil || e.Cover != "beach" ||
+		!slices.Equal(e.Accepted, []uuid.UUID{g.carla}) {
+		t.Fatalf("after new cover = %+v, %v", e, err)
+	}
+	bad := "forest"
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.bob, e.ID, EntryChanges{Cover: &bad}); !errors.Is(err, ErrInvalidCover) {
+		t.Fatalf("bad cover: %v", err)
+	}
+	none := ""
+	if e, err = f.svc.UpdateEntry(ctx, g.cal.ID, g.bob, e.ID, EntryChanges{Cover: &none}); err != nil || e.Cover != "" {
+		t.Fatalf("after removing = %+v, %v", e, err)
+	}
+	var stored *string
+	if err := f.db.QueryRow(ctx, "SELECT cover FROM entries WHERE id = $1", e.ID).Scan(&stored); err != nil || stored != nil {
+		t.Fatalf("stored cover = %v, %v", stored, err)
+	}
+
+	// The database holds the same list.
+	if _, err := f.db.Exec(ctx, "UPDATE entries SET cover = 'forest' WHERE id = $1", e.ID); err == nil {
+		t.Fatal("unknown cover was stored")
 	}
 }
 
