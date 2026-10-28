@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { canEditEntries, useCalendar } from '@/api/calendars';
-import { errorMessage, type Entry, type EntryColor } from '@/api/client';
+import { errorMessage, type Entry, type EntryColor, type EntryCover } from '@/api/client';
 import {
+  entryMaxDays,
   entryTitleMaxLength,
   isEntryGone,
   useCreateEntry,
@@ -15,20 +16,23 @@ import {
 } from '@/api/entries';
 import { Button } from '@/components/Button';
 import { CalendarError } from '@/components/CalendarError';
+import { Cover } from '@/components/Cover';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { ListRow, ListSection } from '@/components/ListSection';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
+import { Switch } from '@/components/Switch';
 import { Text } from '@/components/Text';
 import { TextField } from '@/components/TextField';
 import { confirm } from '@/lib/confirm';
-import { formatDay, isISODate, monthOf, today } from '@/lib/dates';
+import { coverLabels, coverScenes } from '@/lib/covers';
+import { addDays, daysFrom, formatDay, formatShortDay, isISODate, monthOf, today } from '@/lib/dates';
 import { haptics } from '@/lib/haptics';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
-import { entryColors, entryInk, radius, space } from '@/theme/tokens';
+import { entryColor, entryColors, entryInk, radius, space } from '@/theme/tokens';
 
 export { ScreenError as ErrorBoundary } from '@/components/ScreenError';
 
@@ -82,11 +86,12 @@ export default function EditEntryScreen() {
     );
   }
   if (entryId) return <EditExisting calendarId={calendarId} entryId={entryId} />;
+  const start = isISODate(date) ? date : today();
   return (
     <Page title={title} sheet>
       <EntryForm
         calendarId={calendarId}
-        initial={{ title: '', date: isISODate(date) ? date : today(), color: 'fjord' }}
+        initial={{ title: '', date: start, endDate: start, color: 'fjord', cover: null }}
       />
     </Page>
   );
@@ -124,37 +129,61 @@ function EditExisting({ calendarId, entryId }: { calendarId: string; entryId: st
   );
 }
 
-function EntryForm({
-  calendarId,
-  entry,
-  initial,
-}: {
-  calendarId: string;
-  entry?: Entry;
-  initial: { title: string; date: string; color: EntryColor };
-}) {
+function EntryForm({ calendarId, entry, initial }: { calendarId: string; entry?: Entry; initial: EntryFields }) {
   const styles = useStyles();
   // What the form opened with; `initial` follows the polled entry.
   const [original] = useState(initial);
   const [title, setTitle] = useState(initial.title);
   const [date, setDate] = useState(initial.date);
+  const [endDate, setEndDate] = useState(initial.endDate);
+  // "Ends on" is off for a one-day entry. While it is on, the first tap on the
+  // grid picks the first day and the next one the last day.
+  const [multiDay, setMultiDay] = useState(initial.endDate !== initial.date);
+  const [pickingEnd, setPickingEnd] = useState(false);
   const [month, setMonth] = useState(monthOf(initial.date));
   const [color, setColor] = useState<EntryColor>(initial.color);
+  const [cover, setCover] = useState<EntryCover | null>(initial.cover);
   const create = useCreateEntry(calendarId);
   const update = useUpdateEntry(calendarId, entry?.id ?? '');
   const save = entry ? update : create;
   const trimmed = title.trim();
+  const days = daysFrom(endDate, date) + 1;
   const moved =
-    entry && date !== original.date && entry.date !== date && entry.accepted.length + entry.declined.length > 0;
+    entry &&
+    (date !== original.date || endDate !== original.endDate) &&
+    (entry.date !== date || entry.endDate !== endDate) &&
+    entry.accepted.length + entry.declined.length > 0;
+
+  const pickDay = (d: string) => {
+    setMonth(monthOf(d));
+    if (multiDay && pickingEnd && d >= date && daysFrom(d, date) < entryMaxDays) {
+      setEndDate(d);
+      setPickingEnd(false);
+      return;
+    }
+    // A new first day; with "Ends on", the next tap picks the last one.
+    setDate(d);
+    setEndDate(d);
+    setPickingEnd(multiDay);
+  };
+
+  const toggleMultiDay = (on: boolean) => {
+    setMultiDay(on);
+    setPickingEnd(on);
+    if (!on) setEndDate(date);
+  };
 
   const submit = () => {
     if (trimmed === '' || save.isPending) return;
-    const body = { title: trimmed, date, color };
+    const body = { title: trimmed, date, endDate, color, cover };
     // Only what the user changed, so edits someone else made meanwhile stay.
+    // A new first day goes with its last day: on its own the API keeps the length.
     const changes: Partial<EntryFields> = {};
     if (trimmed !== original.title) changes.title = trimmed;
     if (date !== original.date) changes.date = date;
+    if (date !== original.date || endDate !== original.endDate) changes.endDate = endDate;
     if (color !== original.color) changes.color = color;
+    if (cover !== original.cover) changes.cover = cover;
     const options = {
       // Back to the calendar on the entry's day, or to the entry itself.
       onSuccess: (saved: Entry) => {
@@ -186,13 +215,21 @@ function EntryForm({
         />
 
         <View>
-          <View style={styles.fieldHeader}>
-            <Text variant="footnote" tone="secondary">
-              Date
-            </Text>
-            <Text variant="footnote" tone="secondary">
-              {formatDay(date)}
-            </Text>
+          <View style={styles.dateHeader}>
+            <View style={styles.dateLabel}>
+              <Text variant="footnote" tone="secondary">
+                {multiDay ? 'Dates' : 'Date'}
+              </Text>
+              <Text variant="subhead" aria-live="polite">
+                {days > 1 ? `${formatShortDay(date)} → ${formatShortDay(endDate)} · ${days} days` : formatDay(date)}
+              </Text>
+            </View>
+            <View style={styles.endsOn}>
+              <Text variant="footnote" tone="secondary">
+                Ends on
+              </Text>
+              <Switch label="Ends on another day" value={multiDay} onValueChange={toggleMultiDay} />
+            </View>
           </View>
           <View style={styles.datePicker}>
             <MonthCalendar
@@ -200,15 +237,18 @@ function EntryForm({
               month={month}
               onMonthChange={setMonth}
               selected={date}
-              onSelect={(d) => {
-                setDate(d);
-                setMonth(monthOf(d));
-              }}
+              rangeEnd={multiDay ? endDate : null}
+              onSelect={pickDay}
             />
           </View>
+          {multiDay && pickingEnd ? (
+            <Text variant="footnote" tone="tertiary" style={styles.note}>
+              Now tap the last day, up to {formatShortDay(addDays(date, entryMaxDays - 1))}.
+            </Text>
+          ) : null}
           {moved ? (
             <Text variant="footnote" tone="tertiary" style={styles.note}>
-              Moving it to another day clears everyone’s answers.
+              Changing the dates clears everyone’s answers.
             </Text>
           ) : null}
         </View>
@@ -218,6 +258,13 @@ function EntryForm({
             Color
           </Text>
           <ColorPicker value={color} onChange={setColor} />
+        </View>
+
+        <View>
+          <Text variant="footnote" tone="secondary" style={styles.fieldLabel}>
+            Cover
+          </Text>
+          <CoverPicker value={cover} color={entryColor(color)} onChange={setCover} />
         </View>
 
         {save.isError ? (
@@ -270,6 +317,60 @@ function ColorPicker({ value, onChange }: { value: EntryColor; onChange: (color:
   );
 }
 
+/** "None" (the sunset in the entry's color) and every scene, four to a row. */
+function CoverPicker({
+  value,
+  color,
+  onChange,
+}: {
+  value: EntryCover | null;
+  color: string;
+  onChange: (cover: EntryCover | null) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const options = [null, ...coverScenes];
+  return (
+    <View style={styles.covers} role="radiogroup" aria-label="Cover">
+      {options.map((c) => {
+        const selected = c === value;
+        const label = c ? coverLabels[c] : 'None';
+        return (
+          <Pressable
+            key={c ?? 'none'}
+            role="radio"
+            aria-checked={selected}
+            aria-label={label}
+            onPress={() => {
+              if (c !== value) haptics.selection();
+              onChange(c);
+            }}
+            style={styles.coverOption}
+          >
+            <View style={[styles.coverRing, selected && { borderColor: colors.text }]}>
+              <Cover color={color} cover={c} style={styles.coverThumb}>
+                {selected ? (
+                  <View style={styles.coverCheck}>
+                    <Icon name="checkmark" size={14} color={entryInk} />
+                  </View>
+                ) : null}
+              </Cover>
+            </View>
+            <Text
+              variant="caption"
+              tone={selected ? 'primary' : 'secondary'}
+              numberOfLines={1}
+              style={styles.coverLabel}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function DeleteEntry({ calendarId, entry }: { calendarId: string; entry: Entry }) {
   const remove = useDeleteEntry(calendarId, entry.id);
   const onDelete = async () => {
@@ -300,11 +401,21 @@ const useStyles = createStyles(() => ({
     gap: space.xl,
     marginTop: space.md,
   },
-  fieldHeader: {
+  dateHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: space.md,
     paddingHorizontal: space.lg,
     marginBottom: space.sm,
+  },
+  dateLabel: {
+    flex: 1,
+    gap: space.xxs,
+  },
+  endsOn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
   },
   fieldLabel: {
     paddingHorizontal: space.lg,
@@ -335,6 +446,44 @@ const useStyles = createStyles(() => ({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // None and the seven scenes: two rows of four.
+  covers: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: space.md,
+    paddingHorizontal: space.xs,
+  },
+  coverOption: {
+    width: '25%',
+    paddingHorizontal: space.xxs,
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  coverRing: {
+    alignSelf: 'stretch',
+    padding: RING,
+    borderRadius: radius.sm + RING * 2,
+    borderWidth: RING,
+    borderColor: 'transparent',
+  },
+  coverThumb: {
+    aspectRatio: 5 / 3,
+    borderRadius: radius.sm,
+  },
+  coverCheck: {
+    position: 'absolute',
+    top: space.xs,
+    right: space.xs,
+    width: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    backgroundColor: '#FFF8EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverLabel: {
+    textAlign: 'center',
   },
   cancel: {
     marginTop: space.sm,
