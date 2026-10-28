@@ -20,3 +20,8 @@ export function lastActive(iso: string, now = Date.now()): string {
 export function monthYear(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
+
+/** "Oct 28, 2026". */
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}

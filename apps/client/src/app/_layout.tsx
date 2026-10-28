@@ -89,6 +89,7 @@ function RootNavigator() {
           <Stack.Screen name="edit-username" options={sheet} />
           <Stack.Screen name="new-calendar" options={sheet} />
           <Stack.Screen name="edit-entry" options={sheet} />
+          <Stack.Screen name="new-token" options={sheet} />
         </Stack.Protected>
         <Stack.Protected guard={status === 'needsUsername'}>
           <Stack.Screen name="welcome" />
