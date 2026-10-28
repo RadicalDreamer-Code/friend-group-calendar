@@ -39,6 +39,7 @@ const pairs = [
 // The sunset stripes, by index: [foreground, background index, minimum, where].
 const sunsetPairs = [
   ['onSunset', 2, TEXT, 'countdown chips on covers (mustard)'],
+  ['onSunset', 2, TEXT, 'day numbers on the trip band in the month grid'],
   ['onSunset', 1, TEXT, 'tangerine chips'],
 ];
 

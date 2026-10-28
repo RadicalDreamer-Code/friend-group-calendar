@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { monthOf } from '@/lib/dates';
+import { addMonths, monthOf } from '@/lib/dates';
 import { usePollWhileFocused, useToday } from '@/lib/freshness';
 
 import { calendarQueryKey, isCalendarGone } from './calendars';
@@ -35,6 +35,23 @@ export function withReply(entry: Entry, userId: string, reply: Reply): Entry {
     accepted: reply === 'accepted' ? [...others(entry.accepted), userId] : others(entry.accepted),
     declined: reply === 'declined' ? [...others(entry.declined), userId] : others(entry.declined),
   };
+}
+
+/** True for an entry that runs over more than one day. */
+export function isTrip(entry: Entry): boolean {
+  return entry.endDate > entry.date;
+}
+
+/** True when the entry is on `date`: its day, or one of a trip's days. */
+export function isOn(entry: Entry, date: string): boolean {
+  return entry.date <= date && date <= entry.endDate;
+}
+
+/** Every YYYY-MM month an entry is in: one, or two or three for a trip. */
+function monthsOf(entry: Entry): string[] {
+  const months = [monthOf(entry.date)];
+  while (months[months.length - 1] < monthOf(entry.endDate)) months.push(addMonths(months[months.length - 1], 1));
+  return months;
 }
 
 /** True when the entry was deleted. */
@@ -79,9 +96,9 @@ export function useNextEntry(calendarId: string, { poll = true } = {}) {
         )
       ).entry,
     // On a new day the key changes; keep showing the last answer until the
-    // new one arrives, so the card doesn't blink out, unless that entry is
-    // now in the past.
-    placeholderData: (previous) => (previous && previous.date < from ? undefined : previous),
+    // new one arrives, so the card doesn't blink out, unless that entry has
+    // ended by now.
+    placeholderData: (previous) => (previous && previous.endDate < from ? undefined : previous),
     refetchInterval: poll ? pollWhileFocused : false,
     retry: (failures, error) => !isCalendarGone(error) && failures < 1,
   });
@@ -122,17 +139,17 @@ const byDay = (a: Entry, b: Entry) =>
   a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 
 /**
- * Puts an entry everywhere it is shown: its own query and the month it is
- * in. It leaves any other month, which matters when its date moved.
+ * Puts an entry everywhere it is shown: its own query and the months it is
+ * in. It leaves any other month, which matters when its dates moved.
  */
 function putEntry(queryClient: QueryClient, calendarId: string, entry: Entry, { optimistic = false } = {}) {
   queryClient.setQueryData(entryQueryKey(calendarId, entry.id), entry);
   updateNext(queryClient, calendarId, entry.id, entry, !optimistic);
   for (const [key, list] of queryClient.getQueriesData<Entry[]>({ queryKey: entriesQueryKey(calendarId) })) {
     if (!list) continue;
-    const month = key[key.length - 1];
+    const month = key[key.length - 1] as string;
     const others = list.filter((e) => e.id !== entry.id);
-    queryClient.setQueryData(key, month === monthOf(entry.date) ? [...others, entry].sort(byDay) : others);
+    queryClient.setQueryData(key, monthsOf(entry).includes(month) ? [...others, entry].sort(byDay) : others);
   }
 }
 
@@ -161,7 +178,8 @@ function updateNext(
   refetch = true,
 ) {
   for (const [key, next] of queryClient.getQueriesData<Entry | null>({ queryKey: nextQueryKey(calendarId) })) {
-    if (next?.id === entryId) queryClient.setQueryData(key, entry ?? nextInMonth(queryClient, calendarId, next));
+    const from = key[key.length - 1] as string;
+    if (next?.id === entryId) queryClient.setQueryData(key, entry ?? nextInMonth(queryClient, calendarId, next, from));
   }
   // Not while an answer is still on its way: the refetch would bring back the old one.
   if (refetch) queryClient.invalidateQueries({ queryKey: nextQueryKey(calendarId) });
@@ -169,11 +187,12 @@ function updateNext(
 
 /**
  * The entry after a deleted next one, as far as its month in the cache knows,
- * so the card does not disappear until the refetch brings it.
+ * so the card does not disappear until the refetch brings it. Entries that
+ * ended before `from` are skipped: a month also lists trips that started earlier.
  */
-function nextInMonth(queryClient: QueryClient, calendarId: string, gone: Entry): Entry | null {
+function nextInMonth(queryClient: QueryClient, calendarId: string, gone: Entry, from: string): Entry | null {
   const month = queryClient.getQueryData<Entry[]>(monthQueryKey(calendarId, monthOf(gone.date)));
-  return month?.filter((e) => e.id !== gone.id && byDay(e, gone) > 0).sort(byDay)[0] ?? null;
+  return month?.filter((e) => e.id !== gone.id && e.endDate >= from && byDay(e, gone) > 0).sort(byDay)[0] ?? null;
 }
 
 /** After a failed change the cached entries may be wrong, so they are refetched. */

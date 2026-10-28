@@ -3,7 +3,7 @@ import { View } from 'react-native';
 
 import { roleLabel, useCalendars } from '@/api/calendars';
 import type { CalendarSummary } from '@/api/client';
-import { useNextEntry } from '@/api/entries';
+import { isTrip, useNextEntry } from '@/api/entries';
 import { AvatarStack } from '@/components/AvatarStack';
 import { Button } from '@/components/Button';
 import { CardRow } from '@/components/CardRow';
@@ -14,7 +14,7 @@ import { IconButton } from '@/components/IconButton';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
-import { formatShortDay } from '@/lib/dates';
+import { formatRange, formatShortDay } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
@@ -76,7 +76,9 @@ function CalendarCard({ calendar }: { calendar: CalendarSummary }) {
   const next = useNextEntry(calendar.id, { poll: false });
   useRefreshOnFocus(next);
   const members = `${calendar.memberCount === 1 ? 'Only you' : `${calendar.memberCount} members`} · ${roleLabel[calendar.role]}`;
-  const upcoming = next.data ? `${formatShortDay(next.data.date)} · ${next.data.title}` : null;
+  const upcoming = next.data
+    ? `${isTrip(next.data) ? formatRange(next.data.date, next.data.endDate) : formatShortDay(next.data.date)} · ${next.data.title}`
+    : null;
 
   return (
     <CardRow

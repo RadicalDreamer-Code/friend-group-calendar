@@ -4,20 +4,31 @@ import { View } from 'react-native';
 
 import { canEditEntries, useCalendar } from '@/api/calendars';
 import { type Calendar, type Entry } from '@/api/client';
-import { replyOf, useMonthEntries } from '@/api/entries';
+import { isOn, isTrip, replyOf, useMonthEntries } from '@/api/entries';
 import { useUser } from '@/auth/session';
 import { CalendarError } from '@/components/CalendarError';
 import { CardRow } from '@/components/CardRow';
 import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
 import { Icon } from '@/components/Icon';
-import { MonthCalendar } from '@/components/MonthCalendar';
+import { MonthCalendar, type TripBand } from '@/components/MonthCalendar';
 import { NextUpCard } from '@/components/NextUpCard';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
 import { Springy } from '@/components/Springy';
 import { Text } from '@/components/Text';
-import { capitalize, formatDay, inDays, isISODate, monthOf, relativeDay, today } from '@/lib/dates';
+import {
+  addDays,
+  capitalize,
+  dayOf,
+  daysOfMonth,
+  formatDay,
+  inDays,
+  isISODate,
+  monthOf,
+  relativeDay,
+  today,
+} from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { goBack } from '@/lib/navigation';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
@@ -72,11 +83,7 @@ function Month({
   const changeMonth = (next: string) => select(monthOf(today()) === next ? today() : `${next}-01`);
   const addEntry = () => router.push({ pathname: '/edit-entry', params: { calendarId: calendar.id, date: selected } });
 
-  const dots = useMemo(() => {
-    const byDay: Record<string, string[]> = {};
-    for (const e of entries.data ?? []) (byDay[e.date] ??= []).push(entryColor(e.color));
-    return byDay;
-  }, [entries.data]);
+  const { dots, bands } = useMemo(() => marks(entries.data ?? [], month), [entries.data, month]);
 
   // The month grid stays usable with what was loaded before; only a first load that fails replaces the day list.
   const refreshError = calendarQuery.isRefetchError
@@ -113,12 +120,19 @@ function Month({
       ) : null}
       <NextUpCard calendar={calendar} />
       <View style={styles.calendar}>
-        <MonthCalendar month={month} onMonthChange={changeMonth} selected={selected} onSelect={select} dots={dots} />
+        <MonthCalendar
+          month={month}
+          onMonthChange={changeMonth}
+          selected={selected}
+          onSelect={select}
+          dots={dots}
+          bands={bands}
+        />
       </View>
       <DayEntries
         calendar={calendar}
         date={selected}
-        entries={entries.data?.filter((e) => e.date === selected)}
+        entries={entries.data?.filter((e) => isOn(e, selected))}
         error={entries.isError ? entries.error : null}
         onRetry={entries.refetch}
         retrying={entries.isFetching}
@@ -159,17 +173,21 @@ function DayEntries({
         {title}
       </Text>
       {entries.map((e) => (
-        <EntryCard key={e.id} calendarId={calendar.id} entry={e} me={me.id} />
+        <EntryCard key={e.id} calendarId={calendar.id} entry={e} date={date} me={me.id} />
       ))}
       {entries.length === 0 || onAdd ? <AddCard empty={entries.length === 0} onAdd={onAdd} /> : null}
     </View>
   );
 }
 
-/** One plan on the selected day: a soft card with its color tile, title and countdown. */
-function EntryCard({ calendarId, entry, me }: { calendarId: string; entry: Entry; me: string }) {
+/**
+ * One plan on the selected day: a soft card with its color tile, title and
+ * countdown, or for a trip which of its days this is.
+ */
+function EntryCard({ calendarId, entry, date, me }: { calendarId: string; entry: Entry; date: string; me: string }) {
   const styles = useStyles();
-  const summary = `${capitalize(inDays(entry.date))} · ${answerSummary(entry, me)}`;
+  const when = isTrip(entry) ? dayOf(entry.date, entry.endDate, date) : capitalize(inDays(entry.date));
+  const summary = `${when} · ${answerSummary(entry, me)}`;
   return (
     <CardRow
       role="button"
@@ -230,6 +248,33 @@ function AddCard({ empty, onAdd }: { empty: boolean; onAdd?: () => void }) {
       {content}
     </Springy>
   );
+}
+
+/**
+ * What the month grid draws for a month's entries: a mustard band across the
+ * days of a trip, and a dot per entry for the rest. Where trips overlap, the
+ * first one gets the band and the others a dot.
+ */
+function marks(entries: Entry[], month: string): { dots: Record<string, string[]>; bands: Record<string, TripBand> } {
+  const dots: Record<string, string[]> = {};
+  const banded: Record<string, Entry> = {};
+  for (const e of entries) {
+    for (const day of daysOfMonth(month)) {
+      if (!isOn(e, day)) continue;
+      if (isTrip(e) && !banded[day]) banded[day] = e;
+      else (dots[day] ??= []).push(entryColor(e.color));
+    }
+  }
+  const bands: Record<string, TripBand> = {};
+  for (const [day, trip] of Object.entries(banded)) {
+    // A band also ends where the day next to it has another trip's band.
+    const other = (d: string) => banded[d] !== undefined && banded[d] !== trip;
+    bands[day] = {
+      start: day === trip.date || other(addDays(day, -1)),
+      end: day === trip.endDate || other(addDays(day, 1)),
+    };
+  }
+  return { dots, bands };
 }
 
 /** "You’re going", "You + 2 going", "You declined · 3 going", "3 going", "No answers yet". */
