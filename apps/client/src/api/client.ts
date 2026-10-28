@@ -6,6 +6,7 @@ import type { components, paths } from './schema';
 
 export type User = components['schemas']['User'];
 export type Session = components['schemas']['Session'];
+export type ApiToken = components['schemas']['ApiToken'];
 export type Platform = components['schemas']['Platform'];
 export type Person = components['schemas']['Person'];
 export type FriendshipStatus = components['schemas']['FriendshipStatus'];

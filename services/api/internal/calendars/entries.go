@@ -24,6 +24,8 @@ const (
 	MaxEntries = 5000
 	// MaxEntryDays is the longest an entry can last, both ends included.
 	MaxEntryDays = 31
+	// MaxRangeDays is the most days ListEntriesRange covers, both ends included.
+	MaxRangeDays = 92
 
 	dateLayout  = "2006-01-02"
 	monthLayout = "2006-01"
@@ -48,6 +50,7 @@ var (
 	// ErrInvalidEndDate: the end is before the start or too far after it.
 	ErrInvalidEndDate = fmt.Errorf("an entry ends on or after its first day and lasts at most %d days", MaxEntryDays)
 	ErrInvalidMonth   = errors.New("months are YYYY-MM, from 2000 to 2099")
+	ErrInvalidRange   = fmt.Errorf("a range ends on or after its first day and covers at most %d days", MaxRangeDays)
 	ErrInvalidColor   = errors.New("unknown entry color")
 	ErrInvalidCover   = errors.New("unknown entry cover")
 	ErrInvalidReply   = errors.New("the answer must be accepted or declined")
@@ -181,6 +184,48 @@ type EntryInput struct {
 	Cover   string
 }
 
+// Validate reports the error CreateEntry would give for in, without looking
+// at the calendar.
+func (in EntryInput) Validate() error {
+	_, err := in.parse()
+	return err
+}
+
+type parsedEntry struct {
+	title, color string
+	day, end     time.Time
+	cover        *string
+}
+
+func (in EntryInput) parse() (parsedEntry, error) {
+	title, err := NormalizeTitle(in.Title)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	day, err := ParseDate(in.Date)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	end := day
+	if in.EndDate != "" {
+		if end, err = ParseDate(in.EndDate); err != nil {
+			return parsedEntry{}, err
+		}
+	}
+	if err := checkSpan(day, end); err != nil {
+		return parsedEntry{}, err
+	}
+	color, err := parseColor(in.Color)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	cover, err := parseCover(in.Cover)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	return parsedEntry{title: title, color: color, day: day, end: end, cover: cover}, nil
+}
+
 // EntryChanges to an entry; nil fields stay as they are. A new Date
 // without an EndDate keeps the entry's length, and an empty Cover removes
 // the cover.
@@ -198,11 +243,34 @@ func (s *Service) ListEntries(ctx context.Context, calendarID, userID uuid.UUID,
 	if err != nil {
 		return nil, err
 	}
+	return s.listEntries(ctx, calendarID, userID, from, from.AddDate(0, 1, 0))
+}
+
+// ListEntriesRange returns the entries that overlap the days from `from` to
+// `to` (YYYY-MM-DD, both included), at most MaxRangeDays of them.
+func (s *Service) ListEntriesRange(ctx context.Context, calendarID, userID uuid.UUID, from, to string) ([]Entry, error) {
+	first, err := ParseDate(from)
+	if err != nil {
+		return nil, err
+	}
+	last, err := ParseDate(to)
+	if err != nil {
+		return nil, err
+	}
+	if last.Before(first) || last.After(first.AddDate(0, 0, MaxRangeDays-1)) {
+		return nil, ErrInvalidRange
+	}
+	return s.listEntries(ctx, calendarID, userID, first, last.AddDate(0, 0, 1))
+}
+
+// listEntries returns the entries that overlap the days from `from` up to,
+// not including, `until`.
+func (s *Service) listEntries(ctx context.Context, calendarID, userID uuid.UUID, from, until time.Time) ([]Entry, error) {
 	if _, _, err := s.view(ctx, calendarID, userID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListEntriesBetween(ctx, store.ListEntriesBetweenParams{
-		CalendarID: calendarID, FromDay: from, UntilDay: from.AddDate(0, 1, 0),
+		CalendarID: calendarID, FromDay: from, UntilDay: until,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list entries: %w", err)
@@ -248,34 +316,13 @@ func (s *Service) GetEntry(ctx context.Context, calendarID, userID, entryID uuid
 
 // CreateEntry adds an entry; the owner and editors may.
 func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID, in EntryInput) (Entry, error) {
-	title, err := NormalizeTitle(in.Title)
-	if err != nil {
-		return Entry{}, err
-	}
-	day, err := ParseDate(in.Date)
-	if err != nil {
-		return Entry{}, err
-	}
-	end := day
-	if in.EndDate != "" {
-		if end, err = ParseDate(in.EndDate); err != nil {
-			return Entry{}, err
-		}
-	}
-	if err := checkSpan(day, end); err != nil {
-		return Entry{}, err
-	}
-	color, err := parseColor(in.Color)
-	if err != nil {
-		return Entry{}, err
-	}
-	cover, err := parseCover(in.Cover)
+	p, err := in.parse()
 	if err != nil {
 		return Entry{}, err
 	}
 	var id uuid.UUID
 	err = s.change(ctx, calendarID, userID, ActionEditEntries, func(q *store.Queries, cal store.Calendar, _ Membership) error {
-		if err := checkRoom(ctx, q, cal.ID, day, end, uuid.Nil); err != nil {
+		if err := checkRoom(ctx, q, cal.ID, p.day, p.end, uuid.Nil); err != nil {
 			return err
 		}
 		total, err := q.CountEntries(ctx, cal.ID)
@@ -286,7 +333,7 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 			return ErrTooManyEntries
 		}
 		e, err := q.CreateEntry(ctx, store.CreateEntryParams{
-			CalendarID: cal.ID, Title: title, Day: day, EndDay: end, Color: color, Cover: cover, CreatedBy: &userID,
+			CalendarID: cal.ID, Title: p.title, Day: p.day, EndDay: p.end, Color: p.color, Cover: p.cover, CreatedBy: &userID,
 		})
 		id = e.ID
 		return err

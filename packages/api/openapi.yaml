@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Friend Group Calendar API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     HTTP API for the friend group calendar. This file is the contract between
     services/api (Go) and apps/client (TypeScript). After changing it, run
@@ -11,6 +11,11 @@ info:
     POST /auth/verify; native apps get a token in the response body and send
     it as `Authorization: Bearer <token>`. Sessions last 90 days and are
     renewed while in use.
+
+    Personal access tokens (`fgc_…`, /me/tokens) are for AI assistants and
+    other MCP clients. Only the MCP endpoint at /mcp accepts them; it is not
+    part of this REST API, and a token sent here leaves the request signed
+    out.
 
     Every error response has the body `{"error": {"code", "message"}}`.
     `code` is stable and meant for the client to switch on.
@@ -299,10 +304,96 @@ paths:
     post:
       operationId: revokeOtherSessions
       summary: Sign out every other device
+      description: Also revokes every personal access token, since one could have been made from another session.
       responses:
         "204":
           description: Signed out
         "401":
+          $ref: "#/components/responses/Error"
+
+  /me/tokens:
+    get:
+      operationId: listApiTokens
+      summary: Personal access tokens that can still be used
+      description: Never includes the tokens themselves. Needs a session; access tokens cannot manage tokens.
+      responses:
+        "200":
+          description: Live tokens, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiToken"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createApiToken
+      summary: Create a personal access token for the MCP endpoint
+      description: |
+        The token is in the response this one time and is never shown again.
+        Error codes: `invalid_token_name`, `invalid_expiry`, `too_many_tokens`
+        (10 live tokens), `rate_limited` (20 an hour).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
+                expiresInDays:
+                  type: integer
+                  enum: [30, 90, 365]
+                  default: 90
+      responses:
+        "201":
+          description: The new token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedApiToken"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /me/tokens/{tokenId}:
+    delete:
+      operationId: revokeApiToken
+      summary: Revoke a personal access token
+      description: "Error codes: `not_found` (no such live token of the caller's)."
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
 
   /users/search:
@@ -1117,6 +1208,36 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ApiToken:
+      type: object
+      required: [id, name, createdAt, lastUsedAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          description: Null until the token is first used. Updated at most once a minute.
+          type: [string, "null"]
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    CreatedApiToken:
+      allOf:
+        - $ref: "#/components/schemas/ApiToken"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              description: "`fgc_` and 43 characters. Shown this one time only."
+              type: string
 
     Session:
       type: object

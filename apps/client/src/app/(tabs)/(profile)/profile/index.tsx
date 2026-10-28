@@ -142,6 +142,13 @@ export default function ProfileScreen() {
 
       <DevicesSection />
 
+      <ListSection
+        title="AI assistants"
+        footer="Let Claude or another AI assistant see your calendars and add entries."
+      >
+        <ListRow label="Connect an AI assistant" chevron onPress={() => router.push('/profile/access-tokens')} />
+      </ListSection>
+
       <ListSection title="Appearance" footer="System follows the light or dark setting of your device.">
         <ListRow>
           <View style={styles.fill}>
@@ -192,7 +199,7 @@ function DevicesSection() {
   const onRevokeOthers = async () => {
     const ok = await confirm({
       title: 'Sign out of all other devices?',
-      message: 'You stay signed in on this device.',
+      message: 'You stay signed in on this device. Your access tokens are revoked too.',
       confirmLabel: 'Sign out others',
       destructive: true,
     });

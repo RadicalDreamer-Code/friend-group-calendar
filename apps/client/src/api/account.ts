@@ -8,6 +8,7 @@ import { clearToken, saveToken } from '@/auth/token';
 import { meQueryKey } from '@/auth/session';
 
 import { api, unwrap, type Platform as ApiPlatform, type User } from './client';
+import { tokensQueryKey } from './tokens';
 
 const sessionsQueryKey = ['sessions'] as const;
 
@@ -161,6 +162,11 @@ export function useRevokeOtherSessions() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => unwrap(api.POST('/me/sessions/revoke-others')),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: sessionsQueryKey }),
+    // The API revokes access tokens too.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: sessionsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: tokensQueryKey }),
+      ]),
   });
 }

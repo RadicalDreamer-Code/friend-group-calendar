@@ -190,9 +190,58 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign out every other device */
+        /**
+         * Sign out every other device
+         * @description Also revokes every personal access token, since one could have been made from another session.
+         */
         post: operations["revokeOtherSessions"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Personal access tokens that can still be used
+         * @description Never includes the tokens themselves. Needs a session; access tokens cannot manage tokens.
+         */
+        get: operations["listApiTokens"];
+        put?: never;
+        /**
+         * Create a personal access token for the MCP endpoint
+         * @description The token is in the response this one time and is never shown again.
+         *     Error codes: `invalid_token_name`, `invalid_expiry`, `too_many_tokens`
+         *     (10 live tokens), `rate_limited` (20 an hour).
+         */
+        post: operations["createApiToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a personal access token
+         * @description Error codes: `not_found` (no such live token of the caller's).
+         */
+        delete: operations["revokeApiToken"];
         options?: never;
         head?: never;
         patch?: never;
@@ -612,6 +661,24 @@ export interface components {
             avatarUrl: string | null;
             /** Format: date-time */
             createdAt: string;
+        };
+        ApiToken: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Null until the token is first used. Updated at most once a minute.
+             */
+            lastUsedAt: string | null;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        CreatedApiToken: components["schemas"]["ApiToken"] & {
+            /** @description `fgc_` and 43 characters. Shown this one time only. */
+            token: string;
         };
         Session: {
             /** Format: uuid */
@@ -1094,6 +1161,89 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Error"];
+        };
+    };
+    listApiTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live tokens, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tokens: components["schemas"]["ApiToken"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createApiToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    /**
+                     * @default 90
+                     * @enum {integer}
+                     */
+                    expiresInDays?: 30 | 90 | 365;
+                };
+            };
+        };
+        responses: {
+            /** @description The new token */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedApiToken"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    revokeApiToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     searchUsers: {

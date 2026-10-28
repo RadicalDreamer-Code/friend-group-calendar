@@ -72,10 +72,14 @@ func (p Platform) Valid() bool {
 	return p == PlatformWeb || p == PlatformIOS || p == PlatformAndroid
 }
 
-// Principal is the signed-in user and the session they are using.
+// Principal is the signed-in user and the session they are using, or the
+// access token for requests to the MCP endpoint.
 type Principal struct {
 	User    store.User
 	Session store.Session
+	// TokenID is set when the principal came from an access token; Session
+	// is empty then.
+	TokenID uuid.UUID
 }
 
 type Service struct {
@@ -90,6 +94,7 @@ type Service struct {
 	emailHourly       *ratelimit.Limiter
 	ipCodes           *ratelimit.Limiter
 	ipVerify          *ratelimit.Limiter
+	tokenCreates      *ratelimit.Limiter
 }
 
 // Limit allows N events per Window.
@@ -118,6 +123,9 @@ type Limits struct {
 	// IPVerify caps verify attempts per client IP, on top of MaxCodeAttempts
 	// per code, so one client cannot guess across many addresses.
 	IPVerify Limit
+	// TokenCreates caps how many access tokens one user creates. It is above
+	// MaxAPITokens, so someone at the limit is told that rather than to wait.
+	TokenCreates Limit
 }
 
 var DefaultLimits = Limits{
@@ -126,6 +134,7 @@ var DefaultLimits = Limits{
 	EmailHourly:       Limit{10, time.Hour},
 	IPCodes:           Limit{20, time.Hour},
 	IPVerify:          Limit{30, 15 * time.Minute},
+	TokenCreates:      Limit{20, time.Hour},
 }
 
 func NewService(db *pgxpool.Pool, sender mailer.Sender, secret []byte, limits Limits) *Service {
@@ -140,6 +149,7 @@ func NewService(db *pgxpool.Pool, sender mailer.Sender, secret []byte, limits Li
 		emailHourly:       ratelimit.New(limits.EmailHourly.N, limits.EmailHourly.Window),
 		ipCodes:           ratelimit.New(limits.IPCodes.N, limits.IPCodes.Window),
 		ipVerify:          ratelimit.New(limits.IPVerify.N, limits.IPVerify.Window),
+		tokenCreates:      ratelimit.New(limits.TokenCreates.N, limits.TokenCreates.Window),
 	}
 }
 
@@ -345,12 +355,32 @@ func (s *Service) RevokeSession(ctx context.Context, userID, sessionID uuid.UUID
 	return n > 0, err
 }
 
-// RevokeOtherSessions signs out every session of the user except keep.
+// RevokeOtherSessions signs out every session of the user except keep, and
+// revokes all of their access tokens: someone who got hold of a session
+// could have made one, and it would outlast the session. It reports how many
+// sessions it ended.
 func (s *Service) RevokeOtherSessions(ctx context.Context, userID, keep uuid.UUID) (int64, error) {
-	return s.q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{Now: s.now(), UserID: userID, KeepID: keep})
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+	q := s.q.WithTx(tx)
+	now := s.now()
+	n, err := q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{Now: now, UserID: userID, KeepID: keep})
+	if err != nil {
+		return 0, fmt.Errorf("revoke sessions: %w", err)
+	}
+	if _, err := q.RevokeAllAPITokens(ctx, store.RevokeAllAPITokensParams{Now: now, UserID: userID}); err != nil {
+		return 0, fmt.Errorf("revoke access tokens: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
-// Cleanup removes expired codes and long-dead sessions.
+// Cleanup removes expired codes and long-dead sessions and access tokens.
 func (s *Service) Cleanup(ctx context.Context) error {
 	now := s.now()
 	if _, err := s.q.DeleteExpiredLoginCodes(ctx, now); err != nil {
@@ -358,6 +388,9 @@ func (s *Service) Cleanup(ctx context.Context) error {
 	}
 	if _, err := s.q.DeleteStaleSessions(ctx, now.Add(-staleSessionRetention)); err != nil {
 		return fmt.Errorf("delete stale sessions: %w", err)
+	}
+	if _, err := s.q.DeleteStaleAPITokens(ctx, now.Add(-staleSessionRetention)); err != nil {
+		return fmt.Errorf("delete stale access tokens: %w", err)
 	}
 	return nil
 }

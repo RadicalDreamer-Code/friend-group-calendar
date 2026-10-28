@@ -17,6 +17,7 @@ import (
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/blob"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/calendars"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/mcpserver"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
 
@@ -33,6 +34,8 @@ type Options struct {
 	Friends        *friends.Service
 	Calendars      *calendars.Service
 	Avatars        blob.Store
+	// MCP serves /mcp; nil leaves the endpoint out.
+	MCP *mcpserver.Server
 	// PublicURL is the API's own address as clients see it, for avatar URLs.
 	PublicURL    string
 	CookieSecure bool
@@ -99,6 +102,13 @@ func NewRouter(o Options) (http.Handler, error) {
 	r.Get("/healthz", s.handleHealth)
 	r.Get("/avatars/{userID}/{file}", s.handleGetAvatar)
 
+	// The MCP endpoint takes access tokens only, so it stays out of the
+	// session group. The cross-origin protection above still applies, as the
+	// MCP spec asks servers to check Origin.
+	if o.MCP != nil {
+		r.With(s.requireAPIToken).Handle("/mcp", o.MCP.Handler())
+	}
+
 	r.Group(func(r chi.Router) {
 		r.Use(s.loadSession)
 
@@ -119,6 +129,9 @@ func NewRouter(o Options) (http.Handler, error) {
 
 			r.Group(func(r chi.Router) {
 				r.Use(requireUsername)
+				r.Get("/me/tokens", s.handleListAPITokens)
+				r.Post("/me/tokens", s.handleCreateAPIToken)
+				r.Delete("/me/tokens/{tokenID}", s.handleRevokeAPIToken)
 				r.Get("/users/search", s.handleSearchUsers)
 				r.Get("/friends", s.handleListFriends)
 				r.Delete("/friends/{userID}", s.handleRemoveFriend)

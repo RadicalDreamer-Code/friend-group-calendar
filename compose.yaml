@@ -48,6 +48,8 @@ services:
     environment:
       API_ADDR: ":8080"
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:8080}
+      # The web app's address, for the entry links that MCP tools return.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8082}
       DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD:-calendar}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable
       # Tests create and drop their own databases on this server.
       TEST_DATABASE_URL: postgres://${POSTGRES_USER:-calendar}:${POSTGRES_PASSWORD:-calendar}@db:5432/${POSTGRES_DB:-calendar}?sslmode=disable

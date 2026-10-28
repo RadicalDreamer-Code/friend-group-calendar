@@ -16,6 +16,8 @@ type Config struct {
 	Addr string
 	// PublicURL is the address clients reach the API at, used to build avatar URLs.
 	PublicURL string
+	// AppURL is the web app's address, for links to it (from MCP tools).
+	AppURL string
 	// DatabaseURL is a Postgres connection string.
 	DatabaseURL string
 	// AllowedOrigins lists the web origins that may call the API with credentials.
@@ -71,6 +73,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Addr:            env("API_ADDR", ":8080"),
 		PublicURL:       strings.TrimRight(env("API_PUBLIC_URL", "http://localhost:8080"), "/"),
+		AppURL:          strings.TrimRight(env("APP_PUBLIC_URL", "http://localhost:8082"), "/"),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		AllowedOrigins:  splitList(env("API_ALLOWED_ORIGINS", "http://localhost:8082")),
 		TrustedProxies:  splitList(os.Getenv("TRUSTED_PROXIES")),
@@ -115,6 +118,9 @@ func Load() (Config, error) {
 	}
 	if u, err := url.Parse(cfg.PublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		fail("API_PUBLIC_URL must be an absolute http(s) URL")
+	}
+	if u, err := url.Parse(cfg.AppURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		fail("APP_PUBLIC_URL must be an absolute http(s) URL")
 	}
 
 	if len(errs) > 0 {

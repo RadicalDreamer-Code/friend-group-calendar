@@ -132,6 +132,30 @@ The client keeps shared data fresh without live updates: queries refetch when th
 comes back into focus or a screen is shown again, and calendar screens poll every 30 seconds
 while they are on screen. Answers show right away and are sent in order, so the last tap wins.
 
+## Use with Claude
+
+The API has an MCP endpoint at `/mcp`, so Claude Code (or any other MCP client) can look at
+your calendars and add entries for you. Create a personal access token under Profile → Connect
+an AI assistant, then add the server:
+
+```sh
+claude mcp add --transport http friend-cal http://localhost:8080/mcp --header "Authorization: Bearer fgc_…"
+```
+
+Any other MCP client takes the URL (`http://localhost:8080/mcp` locally, `https://api.<domain>/mcp`
+in production) and the header `Authorization: Bearer fgc_…`. The transport is Streamable HTTP,
+stateless, with plain JSON responses.
+
+Tools: `list_calendars`, `list_entries` (a calendar's entries between two dates, at most 92 days,
+with who is going) and `create_entry` (owners and editors; at most 30 an hour). Everything goes
+through the same permission checks as the app, and a viewer gets a tool error rather than a new
+entry.
+
+Tokens are `fgc_` plus 32 random bytes, stored as a SHA-256 hash and shown once. They expire
+after 30, 90 or 365 days, can be revoked on the same screen, and only `/mcp` accepts them: the
+REST API keeps taking sessions only, so a token cannot sign in to the app or create more tokens.
+At most 10 live tokens per user.
+
 ## Design
 
 Minimal, Apple HIG-inspired: whitespace, hairlines, the system font and one accent.

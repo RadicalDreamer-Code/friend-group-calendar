@@ -228,8 +228,16 @@ func TestRevokeOtherSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	token, err := f.svc.CreateAPIToken(ctx, p.User.ID, "Claude Code", 365)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if n, err := f.svc.RevokeOtherSessions(ctx, p.User.ID, p.Session.ID); err != nil || n != 1 {
 		t.Fatalf("revoked %d sessions (err %v), want 1", n, err)
+	}
+	// A token made from a stolen session must not outlive it.
+	if _, err := f.svc.AuthenticateToken(ctx, token.Token); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("access token after signing out others: err = %v, want ErrUnauthenticated", err)
 	}
 	if _, _, err := f.svc.Authenticate(ctx, phone.Token); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("revoked session: err = %v, want ErrUnauthenticated", err)
