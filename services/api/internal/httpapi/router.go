@@ -119,6 +119,9 @@ func NewRouter(o Options) (http.Handler, error) {
 
 			r.Group(func(r chi.Router) {
 				r.Use(requireUsername)
+				r.Get("/me/tokens", s.handleListAPITokens)
+				r.Post("/me/tokens", s.handleCreateAPIToken)
+				r.Delete("/me/tokens/{tokenID}", s.handleRevokeAPIToken)
 				r.Get("/users/search", s.handleSearchUsers)
 				r.Get("/friends", s.handleListFriends)
 				r.Delete("/friends/{userID}", s.handleRemoveFriend)
