@@ -40,6 +40,25 @@ func TestParseEntryInput(t *testing.T) {
 		}
 	}
 
+	day, _ := ParseDate("2026-10-30")
+	for _, tt := range []struct {
+		end  string
+		want error
+	}{
+		{"2026-10-30", nil},
+		{"2026-11-29", nil}, // 31 days, both ends included
+		{"2026-11-30", ErrInvalidEndDate},
+		{"2026-10-29", ErrInvalidEndDate},
+	} {
+		end, _ := ParseDate(tt.end)
+		if err := checkSpan(day, end); !errors.Is(err, tt.want) {
+			t.Errorf("checkSpan(2026-10-30, %s) = %v, want %v", tt.end, err, tt.want)
+		}
+	}
+	if err := checkSpan(LastDay, LastDay.AddDate(0, 0, 1)); !errors.Is(err, ErrInvalidDate) {
+		t.Errorf("checkSpan past 2099 = %v", err)
+	}
+
 	if _, err := ParseReply("maybe"); !errors.Is(err, ErrInvalidReply) {
 		t.Errorf("ParseReply(maybe) = %v", err)
 	}
@@ -172,6 +191,192 @@ func TestNextEntry(t *testing.T) {
 	if _, _, err := f.svc.NextEntry(ctx, g.cal.ID, outsider, "2026-10-24"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("outsider: %v", err)
 	}
+}
+
+func (f *fixture) trip(t *testing.T, g group, title, date, endDate string) Entry {
+	t.Helper()
+	e, err := f.svc.CreateEntry(context.Background(), g.cal.ID, g.ada, EntryInput{Title: title, Date: date, EndDate: endDate, Color: "moss"})
+	if err != nil {
+		t.Fatalf("create trip: %v", err)
+	}
+	return e
+}
+
+func titles(entries []Entry) []string {
+	var out []string
+	for _, e := range entries {
+		out = append(out, e.Title)
+	}
+	return out
+}
+
+func TestMultiDayEntriesOverlapMonths(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+
+	single := f.entry(t, g, g.ada, "Dinner", "2026-10-30")
+	if !single.EndDay.Equal(single.Day) {
+		t.Fatalf("single-day entry ends %v", single.EndDay)
+	}
+	trip := f.trip(t, g, "Cabin trip", "2026-10-30", "2026-11-02")
+	if FormatDate(trip.Day) != "2026-10-30" || FormatDate(trip.EndDay) != "2026-11-02" {
+		t.Fatalf("trip = %+v", trip)
+	}
+	f.trip(t, g, "Long weekend", "2026-09-27", "2026-10-01")
+	f.trip(t, g, "Whole November", "2026-11-01", "2026-11-30")
+	f.entry(t, g, g.ada, "September", "2026-09-30")
+	f.entry(t, g, g.ada, "December", "2026-12-01")
+
+	for _, tt := range []struct {
+		month string
+		want  []string
+	}{
+		{"2026-09", []string{"Long weekend", "September"}},
+		{"2026-10", []string{"Long weekend", "Dinner", "Cabin trip"}},
+		{"2026-11", []string{"Cabin trip", "Whole November"}},
+		{"2026-12", []string{"December"}},
+	} {
+		list, err := f.svc.ListEntries(ctx, g.cal.ID, g.carla, tt.month)
+		if err != nil || !slices.Equal(titles(list), tt.want) {
+			t.Fatalf("%s = %v, %v; want %v", tt.month, titles(list), err, tt.want)
+		}
+	}
+}
+
+func TestNextEntryStillRunning(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+	f.trip(t, g, "Cabin trip", "2026-10-30", "2026-11-02")
+	f.entry(t, g, g.ada, "Dinner", "2026-11-01")
+
+	for _, tt := range []struct{ from, want string }{
+		{"2026-10-29", "Cabin trip"},
+		{"2026-11-01", "Cabin trip"}, // still running, and it started first
+		{"2026-11-02", "Cabin trip"}, // its last day
+	} {
+		e, ok, err := f.svc.NextEntry(ctx, g.cal.ID, g.carla, tt.from)
+		if err != nil || !ok || e.Title != tt.want {
+			t.Fatalf("from %s = %q, %v, %v; want %q", tt.from, e.Title, ok, err, tt.want)
+		}
+	}
+	if _, ok, err := f.svc.NextEntry(ctx, g.cal.ID, g.carla, "2026-11-03"); err != nil || ok {
+		t.Fatalf("after the trip: ok %v, %v", ok, err)
+	}
+}
+
+func TestMultiDayEntryValidation(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+
+	for _, tt := range []struct {
+		end  string
+		want error
+	}{
+		{"2026-10-29", ErrInvalidEndDate},
+		{"2026-11-30", ErrInvalidEndDate},
+		{"2026-11-31", ErrInvalidDate},
+	} {
+		in := EntryInput{Title: "Trip", Date: "2026-10-30", EndDate: tt.end, Color: "sage"}
+		if _, err := f.svc.CreateEntry(ctx, g.cal.ID, g.ada, in); !errors.Is(err, tt.want) {
+			t.Fatalf("end %s: %v, want %v", tt.end, err, tt.want)
+		}
+	}
+	trip := f.trip(t, g, "Trip", "2026-10-30", "2026-11-29") // the longest allowed
+
+	// Moving the start alone keeps the length; that may not run past 2099.
+	late := "2099-12-30"
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, EntryChanges{Date: &late}); !errors.Is(err, ErrInvalidDate) {
+		t.Fatalf("moving past 2099: %v", err)
+	}
+	early, tooLate := "2026-10-29", "2026-11-30"
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, EntryChanges{Date: &early}); err != nil {
+		t.Fatalf("moving a day earlier: %v", err)
+	}
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, EntryChanges{EndDate: &tooLate}); !errors.Is(err, ErrInvalidEndDate) {
+		t.Fatalf("making it longer: %v", err)
+	}
+	start, end := "2026-11-05", "2026-11-03"
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, EntryChanges{Date: &start, EndDate: &end}); !errors.Is(err, ErrInvalidEndDate) {
+		t.Fatalf("ending before the start: %v", err)
+	}
+
+	// The database holds the same rules.
+	if _, err := f.db.Exec(ctx, "UPDATE entries SET end_day = day - 1 WHERE id = $1", trip.ID); err == nil {
+		t.Fatal("end before start was stored")
+	}
+	if _, err := f.db.Exec(ctx, "UPDATE entries SET end_day = day + 31 WHERE id = $1", trip.ID); err == nil {
+		t.Fatal("32-day entry was stored")
+	}
+}
+
+func TestMultiDayEntryAnswers(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+	trip := f.trip(t, g, "Cabin trip", "2026-10-30", "2026-11-02")
+
+	accept := func() {
+		t.Helper()
+		if _, err := f.svc.Respond(ctx, g.cal.ID, g.carla, trip.ID, ReplyAccepted); err != nil {
+			t.Fatal(err)
+		}
+	}
+	update := func(c EntryChanges) Entry {
+		t.Helper()
+		e, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, c)
+		if err != nil {
+			t.Fatalf("update: %v", err)
+		}
+		return e
+	}
+
+	accept()
+	same, sameEnd := "2026-10-30", "2026-11-02"
+	if e := update(EntryChanges{Date: &same, EndDate: &sameEnd}); len(e.Accepted) != 1 {
+		t.Fatalf("same dates cleared the answers: %+v", e)
+	}
+	end := "2026-11-03"
+	if e := update(EntryChanges{EndDate: &end}); len(e.Accepted) != 0 || FormatDate(e.EndDay) != end {
+		t.Fatalf("after a new end date = %+v", e)
+	}
+	accept()
+	start := "2026-11-06"
+	e := update(EntryChanges{Date: &start})
+	if len(e.Accepted) != 0 || FormatDate(e.Day) != start || FormatDate(e.EndDay) != "2026-11-10" {
+		t.Fatalf("after a new start date = %+v", e)
+	}
+}
+
+func TestMultiDayEntryDayLimit(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+
+	// A trip counts on every one of its days.
+	for range MaxEntriesPerDay - 1 {
+		f.entry(t, g, g.ada, "x", "2026-11-01")
+	}
+	trip := f.trip(t, g, "Cabin trip", "2026-10-30", "2026-11-02")
+	if _, err := f.svc.CreateEntry(ctx, g.cal.ID, g.ada, EntryInput{Title: "y", Date: "2026-11-01", Color: "sage"}); !errors.Is(err, ErrDayFull) {
+		t.Fatalf("adding to a day the trip filled: %v", err)
+	}
+	if _, err := f.svc.CreateEntry(ctx, g.cal.ID, g.ada, EntryInput{Title: "y", Date: "2026-10-25", EndDate: "2026-11-05", Color: "sage"}); !errors.Is(err, ErrDayFull) {
+		t.Fatalf("a trip over the full day: %v", err)
+	}
+	// Changing the trip's dates does not count it against itself.
+	end := "2026-11-04"
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, EntryChanges{EndDate: &end}); err != nil {
+		t.Fatalf("longer trip over its own day: %v", err)
+	}
+	// Moving it off the day makes room again.
+	start := "2026-11-02"
+	if _, err := f.svc.UpdateEntry(ctx, g.cal.ID, g.ada, trip.ID, EntryChanges{Date: &start}); err != nil {
+		t.Fatal(err)
+	}
+	f.entry(t, g, g.ada, "y", "2026-11-01")
 }
 
 func TestEntriesStayInTheirCalendar(t *testing.T) {

@@ -11,6 +11,7 @@ type entryJSON struct {
 	ID        string      `json:"id"`
 	Title     string      `json:"title"`
 	Date      string      `json:"date"`
+	EndDate   string      `json:"endDate"`
 	Color     string      `json:"color"`
 	CreatedBy *personJSON `json:"createdBy"`
 	CreatedAt string      `json:"createdAt"`
@@ -49,7 +50,7 @@ func TestEntriesFlow(t *testing.T) {
 	}
 
 	e := bob.entry("POST", path+"/entries", map[string]string{"title": " Ski day ", "date": "2026-10-31", "color": "rose"}, http.StatusCreated)
-	if e.Title != "Ski day" || e.Date != "2026-10-31" || e.Color != "rose" || e.CreatedBy == nil ||
+	if e.Title != "Ski day" || e.Date != "2026-10-31" || e.EndDate != "2026-10-31" || e.Color != "rose" || e.CreatedBy == nil ||
 		e.CreatedBy.Username != "bob" || e.Accepted == nil || len(e.Accepted) != 0 || e.Declined == nil {
 		t.Fatalf("created = %+v", e)
 	}
@@ -142,6 +143,10 @@ func TestEntriesErrors(t *testing.T) {
 		{"POST", path + "/entries", map[string]string{"title": "x", "date": "01.10.2026", "color": "sage"}, http.StatusBadRequest, "invalid_date"},
 		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "color": "red"}, http.StatusBadRequest, "invalid_color"},
 		{"PATCH", entryPath, map[string]string{"date": "2100-01-01"}, http.StatusBadRequest, "invalid_date"},
+		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "endDate": "2026-09-30", "color": "sage"}, http.StatusBadRequest, "invalid_end_date"},
+		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "endDate": "2026-11-01", "color": "sage"}, http.StatusBadRequest, "invalid_end_date"},
+		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "endDate": "2026-10-1", "color": "sage"}, http.StatusBadRequest, "invalid_date"},
+		{"PATCH", entryPath, map[string]string{"endDate": "2026-09-30"}, http.StatusBadRequest, "invalid_end_date"},
 		{"PUT", entryPath + "/response", map[string]string{"status": "maybe"}, http.StatusBadRequest, "invalid_status"},
 		{"PUT", entryPath + "/response", map[string]string{}, http.StatusBadRequest, "invalid_status"},
 		{"GET", path + "/entries/not-a-uuid", nil, http.StatusNotFound, "entry_not_found"},
@@ -167,5 +172,41 @@ func TestEntriesErrors(t *testing.T) {
 	} {
 		resp, body := dora.do(tt.method, tt.path, tt.body)
 		expectError(t, resp, body, http.StatusNotFound, "calendar_not_found")
+	}
+}
+
+func TestMultiDayEntriesAPI(t *testing.T) {
+	api := newTestAPI(t)
+	ada, _ := api.signUp(t, "ada@example.com", "ada")
+	cal := ada.calendar("POST", "/calendars", map[string]string{"name": "Trip"}, http.StatusCreated)
+	path := "/calendars/" + cal.ID
+
+	trip := ada.entry("POST", path+"/entries", map[string]string{
+		"title": "Cabin trip", "date": "2026-10-30", "endDate": "2026-11-02", "color": "moss",
+	}, http.StatusCreated)
+	if trip.Date != "2026-10-30" || trip.EndDate != "2026-11-02" {
+		t.Fatalf("created = %+v", trip)
+	}
+
+	// The trip shows in both months it touches, and as next up while it runs.
+	for _, month := range []string{"2026-10", "2026-11"} {
+		resp, body := ada.do("GET", path+"/entries?month="+month, nil)
+		if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"endDate":"2026-11-02"`) {
+			t.Fatalf("%s: %d %s", month, resp.StatusCode, body)
+		}
+	}
+	resp, body := ada.do("GET", path+"/entries/next?from=2026-11-01", nil)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"title":"Cabin trip"`) {
+		t.Fatalf("next while running: %d %s", resp.StatusCode, body)
+	}
+
+	// A new start date keeps the length; endDate alone changes it.
+	moved := ada.entry("PATCH", path+"/entries/"+trip.ID, map[string]string{"date": "2026-11-06"}, http.StatusOK)
+	if moved.Date != "2026-11-06" || moved.EndDate != "2026-11-09" {
+		t.Fatalf("moved = %+v", moved)
+	}
+	shorter := ada.entry("PATCH", path+"/entries/"+trip.ID, map[string]string{"endDate": "2026-11-06"}, http.StatusOK)
+	if shorter.Date != "2026-11-06" || shorter.EndDate != "2026-11-06" {
+		t.Fatalf("shortened = %+v", shorter)
 	}
 }

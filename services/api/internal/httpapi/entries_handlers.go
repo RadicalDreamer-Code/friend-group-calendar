@@ -14,8 +14,9 @@ import (
 type entryResponse struct {
 	ID    uuid.UUID `json:"id"`
 	Title string    `json:"title"`
-	// Date is the entry's whole day, YYYY-MM-DD.
+	// Date and EndDate are the entry's first and last whole day, YYYY-MM-DD.
 	Date      string          `json:"date"`
+	EndDate   string          `json:"endDate"`
 	Color     string          `json:"color"`
 	CreatedBy *personResponse `json:"createdBy"`
 	CreatedAt time.Time       `json:"createdAt"`
@@ -34,6 +35,7 @@ func (s *Server) entryResponse(e calendars.Entry) entryResponse {
 		ID:        e.ID,
 		Title:     e.Title,
 		Date:      calendars.FormatDate(e.Day),
+		EndDate:   calendars.FormatDate(e.EndDay),
 		Color:     e.Color,
 		CreatedAt: e.CreatedAt,
 		UpdatedAt: e.UpdatedAt,
@@ -69,7 +71,7 @@ type nextEntryResponse struct {
 	Entry *entryResponse `json:"entry"`
 }
 
-// handleNextEntry returns the first entry on or after ?from=YYYY-MM-DD.
+// handleNextEntry returns the first entry that has not ended before ?from=YYYY-MM-DD.
 func (s *Server) handleNextEntry(w http.ResponseWriter, r *http.Request) {
 	p := mustPrincipal(r.Context())
 	id, ok := calendarIDParam(w, r)
@@ -89,9 +91,10 @@ func (s *Server) handleNextEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 type createEntryRequest struct {
-	Title string `json:"title"`
-	Date  string `json:"date"`
-	Color string `json:"color"`
+	Title   string `json:"title"`
+	Date    string `json:"date"`
+	EndDate string `json:"endDate"`
+	Color   string `json:"color"`
 }
 
 func (s *Server) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +107,9 @@ func (s *Server) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	e, err := s.calendars.CreateEntry(r.Context(), id, p.User.ID, calendars.EntryInput{Title: req.Title, Date: req.Date, Color: req.Color})
+	e, err := s.calendars.CreateEntry(r.Context(), id, p.User.ID, calendars.EntryInput{
+		Title: req.Title, Date: req.Date, EndDate: req.EndDate, Color: req.Color,
+	})
 	if writeEntryError(w, r, err) {
 		writeJSON(w, http.StatusCreated, s.entryResponse(e))
 	}
@@ -123,9 +128,10 @@ func (s *Server) handleGetEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateEntryRequest struct {
-	Title *string `json:"title"`
-	Date  *string `json:"date"`
-	Color *string `json:"color"`
+	Title   *string `json:"title"`
+	Date    *string `json:"date"`
+	EndDate *string `json:"endDate"`
+	Color   *string `json:"color"`
 }
 
 func (s *Server) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +144,9 @@ func (s *Server) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	e, err := s.calendars.UpdateEntry(r.Context(), id, p.User.ID, entryID, calendars.EntryChanges{Title: req.Title, Date: req.Date, Color: req.Color})
+	e, err := s.calendars.UpdateEntry(r.Context(), id, p.User.ID, entryID, calendars.EntryChanges{
+		Title: req.Title, Date: req.Date, EndDate: req.EndDate, Color: req.Color,
+	})
 	if writeEntryError(w, r, err) {
 		writeJSON(w, http.StatusOK, s.entryResponse(e))
 	}
@@ -216,6 +224,8 @@ func writeEntryError(w http.ResponseWriter, r *http.Request, err error) bool {
 		writeError(w, http.StatusBadRequest, "invalid_title", "Entry names are 1–80 characters.")
 	case errors.Is(err, calendars.ErrInvalidDate):
 		writeError(w, http.StatusBadRequest, "invalid_date", "Pick a date between 2000 and 2099.")
+	case errors.Is(err, calendars.ErrInvalidEndDate):
+		writeError(w, http.StatusBadRequest, "invalid_end_date", "An entry ends on or after its first day and lasts at most 31 days.")
 	case errors.Is(err, calendars.ErrInvalidMonth):
 		writeError(w, http.StatusBadRequest, "invalid_month", "The month must look like 2026-10, between 2000 and 2099.")
 	case errors.Is(err, calendars.ErrInvalidColor):

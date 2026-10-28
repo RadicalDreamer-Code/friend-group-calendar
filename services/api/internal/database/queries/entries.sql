@@ -1,30 +1,31 @@
 -- name: CreateEntry :one
-INSERT INTO entries (calendar_id, title, day, color, created_by)
-VALUES (sqlc.arg(calendar_id), sqlc.arg(title), sqlc.arg(day), sqlc.arg(color), sqlc.arg(created_by))
+INSERT INTO entries (calendar_id, title, day, end_day, color, created_by)
+VALUES (sqlc.arg(calendar_id), sqlc.arg(title), sqlc.arg(day), sqlc.arg(end_day), sqlc.arg(color), sqlc.arg(created_by))
 RETURNING *;
 
 -- name: GetEntry :one
 SELECT * FROM entries WHERE id = sqlc.arg(id) AND calendar_id = sqlc.arg(calendar_id);
 
 -- name: GetEntryWithCreator :one
-SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
 WHERE e.id = sqlc.arg(id) AND e.calendar_id = sqlc.arg(calendar_id);
 
 -- name: ListEntriesBetween :many
--- Entries from `from` up to, not including, `until`, by day and then in the order they were added.
-SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+-- Entries that overlap the days from `from` up to, not including, `until`,
+-- by first day and then in the order they were added.
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
-WHERE e.calendar_id = sqlc.arg(calendar_id) AND e.day >= sqlc.arg(from_day) AND e.day < sqlc.arg(until_day)
+WHERE e.calendar_id = sqlc.arg(calendar_id) AND e.day < sqlc.arg(until_day) AND e.end_day >= sqlc.arg(from_day)
 ORDER BY e.day, e.created_at, e.id;
 
 -- name: UpdateEntry :one
 UPDATE entries
-SET title = sqlc.arg(title), day = sqlc.arg(day), color = sqlc.arg(color), updated_at = now()
+SET title = sqlc.arg(title), day = sqlc.arg(day), end_day = sqlc.arg(end_day), color = sqlc.arg(color), updated_at = now()
 WHERE id = sqlc.arg(id) AND calendar_id = sqlc.arg(calendar_id)
 RETURNING *;
 
@@ -34,8 +35,16 @@ DELETE FROM entries WHERE id = sqlc.arg(id) AND calendar_id = sqlc.arg(calendar_
 -- name: CountEntries :one
 SELECT count(*)::int FROM entries WHERE calendar_id = $1;
 
--- name: CountEntriesOnDay :one
-SELECT count(*)::int FROM entries WHERE calendar_id = sqlc.arg(calendar_id) AND day = sqlc.arg(day);
+-- name: MostEntriesOnADay :one
+-- The most entries on any one day from `first_day` to `last_day`, leaving out
+-- the entry `except_id`.
+SELECT COALESCE(max(n), 0)::int FROM (
+    SELECT count(*) AS n
+    FROM generate_series(sqlc.arg(first_day)::date, sqlc.arg(last_day)::date, interval '1 day') AS d (day)
+    JOIN entries e ON e.calendar_id = sqlc.arg(calendar_id) AND e.day <= d.day::date AND e.end_day >= d.day::date
+    WHERE e.id <> sqlc.arg(except_id)
+    GROUP BY d.day
+) per_day;
 
 -- name: ListEntryResponses :many
 -- Answers of the people who are still members, oldest first.
@@ -57,7 +66,7 @@ WHERE entry_responses.status <> excluded.status;
 DELETE FROM entry_responses WHERE entry_id = sqlc.arg(entry_id) AND user_id = sqlc.arg(user_id);
 
 -- name: DeleteEntryResponses :exec
--- Everyone's answers to an entry, for when its date moves.
+-- Everyone's answers to an entry, for when its dates change.
 DELETE FROM entry_responses WHERE entry_id = $1;
 
 -- name: DeleteMemberEntryResponses :exec
@@ -67,11 +76,12 @@ USING entries e
 WHERE e.id = r.entry_id AND e.calendar_id = sqlc.arg(calendar_id) AND r.user_id = sqlc.arg(user_id);
 
 -- name: NextEntry :one
--- The first entry on or after `from_day`, by day and then in the order they were added.
-SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+-- The first entry that has not ended before `from_day`, so one that is still
+-- running comes first; by first day and then in the order they were added.
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
-WHERE e.calendar_id = sqlc.arg(calendar_id) AND e.day >= sqlc.arg(from_day)
+WHERE e.calendar_id = sqlc.arg(calendar_id) AND e.end_day >= sqlc.arg(from_day)
 ORDER BY e.day, e.created_at, e.id
 LIMIT 1;
