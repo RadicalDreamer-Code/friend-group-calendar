@@ -18,6 +18,7 @@ export type Calendar = components['schemas']['Calendar'];
 export type CalendarMember = components['schemas']['CalendarMember'];
 export type Entry = components['schemas']['Entry'];
 export type EntryColor = components['schemas']['EntryColor'];
+export type EntryCover = components['schemas']['EntryCover'];
 export type EntryResponseStatus = components['schemas']['EntryResponseStatus'];
 
 /**

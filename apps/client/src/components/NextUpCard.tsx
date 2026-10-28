@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import type { Calendar } from '@/api/client';
+import type { Calendar, EntryCover } from '@/api/client';
 import { useNextEntry } from '@/api/entries';
 import { formatDay, formatShortDay, inDays } from '@/lib/dates';
 import { useRefreshOnFocus } from '@/lib/freshness';
@@ -19,6 +19,7 @@ import { createStyles } from '@/theme/ThemeProvider';
 import { entryColor, layout, radius, space } from '@/theme/tokens';
 
 import { Cover } from './Cover';
+import { CoverIcon } from './CoverIcon';
 import { Icon } from './Icon';
 import { RainbowArc } from './RainbowArc';
 import { Springy } from './Springy';
@@ -54,6 +55,7 @@ export function NextUpCard({ calendar }: { calendar: Calendar }) {
     >
       <Cover
         color={entryColor(entry.color)}
+        cover={entry.cover}
         // Taller on wide screens, so more of the sunset shows in a long card.
         style={[styles.cover, width >= layout.wideBreakpoint && styles.coverWide]}
         sunAt={0.62}
@@ -74,14 +76,14 @@ export function NextUpCard({ calendar }: { calendar: Calendar }) {
             {formatShortDay(entry.date)} · {going} of {members} going
           </Text>
         </View>
-        <BobbingIcon />
+        <BobbingIcon cover={entry.cover} />
       </Cover>
     </Springy>
   );
 }
 
 /** The cover's icon, bobbing gently; still with reduced motion. */
-function BobbingIcon() {
+function BobbingIcon({ cover }: { cover: EntryCover | null }) {
   const styles = useStyles();
   const reduceMotion = useReducedMotion();
   const bob = useSharedValue(0);
@@ -95,12 +97,13 @@ function BobbingIcon() {
   }));
   return (
     <Animated.View style={[styles.icon, style]} aria-hidden>
-      <Icon name="sparkles" size={30} color="#FFF0C8" />
+      {cover ? <CoverIcon cover={cover} size={30} color={ICON} /> : <Icon name="sparkles" size={30} color={ICON} />}
     </Animated.View>
   );
 }
 
 const ARC = 104;
+const ICON = '#FFF0C8';
 const HEIGHT = 128;
 
 const useStyles = createStyles((c) => ({

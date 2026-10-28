@@ -8,10 +8,11 @@ import { replyOf, useMonthEntries } from '@/api/entries';
 import { useUser } from '@/auth/session';
 import { CalendarError } from '@/components/CalendarError';
 import { CardRow } from '@/components/CardRow';
+import { CoverIcon } from '@/components/CoverIcon';
 import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
 import { Icon } from '@/components/Icon';
-import { MonthCalendar } from '@/components/MonthCalendar';
+import { MonthCalendar, type DayMark } from '@/components/MonthCalendar';
 import { NextUpCard } from '@/components/NextUpCard';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
@@ -72,9 +73,9 @@ function Month({
   const changeMonth = (next: string) => select(monthOf(today()) === next ? today() : `${next}-01`);
   const addEntry = () => router.push({ pathname: '/edit-entry', params: { calendarId: calendar.id, date: selected } });
 
-  const dots = useMemo(() => {
-    const byDay: Record<string, string[]> = {};
-    for (const e of entries.data ?? []) (byDay[e.date] ??= []).push(entryColor(e.color));
+  const marks = useMemo(() => {
+    const byDay: Record<string, DayMark[]> = {};
+    for (const e of entries.data ?? []) (byDay[e.date] ??= []).push({ color: entryColor(e.color), cover: e.cover });
     return byDay;
   }, [entries.data]);
 
@@ -113,7 +114,7 @@ function Month({
       ) : null}
       <NextUpCard calendar={calendar} />
       <View style={styles.calendar}>
-        <MonthCalendar month={month} onMonthChange={changeMonth} selected={selected} onSelect={select} dots={dots} />
+        <MonthCalendar month={month} onMonthChange={changeMonth} selected={selected} onSelect={select} marks={marks} />
       </View>
       <DayEntries
         calendar={calendar}
@@ -166,7 +167,7 @@ function DayEntries({
   );
 }
 
-/** One plan on the selected day: a soft card with its color tile, title and countdown. */
+/** One plan on the selected day: a soft card with its color tile and cover icon, title and countdown. */
 function EntryCard({ calendarId, entry, me }: { calendarId: string; entry: Entry; me: string }) {
   const styles = useStyles();
   const summary = `${capitalize(inDays(entry.date))} · ${answerSummary(entry, me)}`;
@@ -180,7 +181,11 @@ function EntryCard({ calendarId, entry, me }: { calendarId: string; entry: Entry
       style={styles.card}
     >
       <View style={[styles.tile, { backgroundColor: entryColor(entry.color) }]} aria-hidden>
-        <Icon name="sparkles" size={20} color={entryInk} />
+        {entry.cover ? (
+          <CoverIcon cover={entry.cover} size={22} color={entryInk} />
+        ) : (
+          <Icon name="sparkles" size={20} color={entryInk} />
+        )}
       </View>
       <View style={styles.cardText}>
         <Text variant="cardTitle" numberOfLines={1}>
