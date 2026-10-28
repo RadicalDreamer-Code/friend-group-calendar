@@ -730,6 +730,9 @@ paths:
     get:
       operationId: listEntries
       summary: The entries of one month
+      description: |
+        Every entry that overlaps the month, so a trip from Oct 30 to Nov 2 is in
+        both October and November.
       parameters:
         - name: month
           in: query
@@ -741,7 +744,7 @@ paths:
             example: "2026-10"
       responses:
         "200":
-          description: Entries by date, then in the order they were added
+          description: Entries by first date, then in the order they were added
           content:
             application/json:
               schema:
@@ -764,8 +767,9 @@ paths:
       operationId: createEntry
       summary: Add an entry (owner and editors)
       description: |
-        Error codes: `invalid_title`, `invalid_date`, `invalid_color`, `forbidden`,
-        `day_full` (20 entries on that day), `too_many_entries` (5000 in the calendar).
+        Error codes: `invalid_title`, `invalid_date`, `invalid_end_date` (before the
+        start date, or more than 31 days long), `invalid_color`, `forbidden`,
+        `day_full` (20 entries on one of its days), `too_many_entries` (5000 in the calendar).
       requestBody:
         required: true
         content:
@@ -778,6 +782,8 @@ paths:
                   $ref: "#/components/schemas/EntryTitle"
                 date:
                   $ref: "#/components/schemas/EntryDate"
+                endDate:
+                  $ref: "#/components/schemas/EntryEndDate"
                 color:
                   $ref: "#/components/schemas/EntryColor"
       responses:
@@ -805,8 +811,9 @@ paths:
       operationId: getNextEntry
       summary: The next entry from a day on
       description: |
-        The first entry on or after `from`, for the "Next up" card. Clients send
-        their local today, since the server does not know their time zone.
+        The first entry that has not ended before `from`, for the "Next up" card:
+        an entry that is still running on `from` comes first. Clients send their
+        local today, since the server does not know their time zone.
         Error codes: `invalid_date`.
       parameters:
         - name: from
@@ -864,7 +871,8 @@ paths:
       operationId: updateEntry
       summary: Change an entry (owner and editors)
       description: |
-        Moving an entry to another date clears everyone's answers.
+        Changing the start or end date clears everyone's answers. A new `date`
+        without an `endDate` keeps the entry's length.
         Error codes as for creating, plus `entry_not_found`.
       requestBody:
         required: true
@@ -877,6 +885,8 @@ paths:
                   $ref: "#/components/schemas/EntryTitle"
                 date:
                   $ref: "#/components/schemas/EntryDate"
+                endDate:
+                  $ref: "#/components/schemas/EntryEndDate"
                 color:
                   $ref: "#/components/schemas/EntryColor"
       responses:
@@ -1251,6 +1261,13 @@ components:
       format: date
       description: A whole day, YYYY-MM-DD, from 2000-01-01 to 2099-12-31.
 
+    EntryEndDate:
+      type: string
+      format: date
+      description: |
+        The entry's last day, YYYY-MM-DD. On or after `date`, and at most 30 days
+        after it (31 days long). Defaults to `date` when creating.
+
     EntryColor:
       description: One of the preset entry colors.
       type: string
@@ -1262,7 +1279,7 @@ components:
 
     Entry:
       type: object
-      required: [id, title, date, color, createdBy, createdAt, updatedAt, accepted, declined]
+      required: [id, title, date, endDate, color, createdBy, createdAt, updatedAt, accepted, declined]
       properties:
         id:
           type: string
@@ -1271,6 +1288,8 @@ components:
           type: string
         date:
           $ref: "#/components/schemas/EntryDate"
+        endDate:
+          $ref: "#/components/schemas/EntryEndDate"
         color:
           $ref: "#/components/schemas/EntryColor"
         createdBy:

@@ -23,32 +23,17 @@ func (q *Queries) CountEntries(ctx context.Context, calendarID uuid.UUID) (int32
 	return column_1, err
 }
 
-const countEntriesOnDay = `-- name: CountEntriesOnDay :one
-SELECT count(*)::int FROM entries WHERE calendar_id = $1 AND day = $2
-`
-
-type CountEntriesOnDayParams struct {
-	CalendarID uuid.UUID `json:"calendar_id"`
-	Day        time.Time `json:"day"`
-}
-
-func (q *Queries) CountEntriesOnDay(ctx context.Context, arg CountEntriesOnDayParams) (int32, error) {
-	row := q.db.QueryRow(ctx, countEntriesOnDay, arg.CalendarID, arg.Day)
-	var column_1 int32
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const createEntry = `-- name: CreateEntry :one
-INSERT INTO entries (calendar_id, title, day, color, created_by)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at
+INSERT INTO entries (calendar_id, title, day, end_day, color, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day
 `
 
 type CreateEntryParams struct {
 	CalendarID uuid.UUID  `json:"calendar_id"`
 	Title      string     `json:"title"`
 	Day        time.Time  `json:"day"`
+	EndDay     time.Time  `json:"end_day"`
 	Color      string     `json:"color"`
 	CreatedBy  *uuid.UUID `json:"created_by"`
 }
@@ -58,6 +43,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		arg.CalendarID,
 		arg.Title,
 		arg.Day,
+		arg.EndDay,
 		arg.Color,
 		arg.CreatedBy,
 	)
@@ -71,6 +57,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EndDay,
 	)
 	return i, err
 }
@@ -110,7 +97,7 @@ const deleteEntryResponses = `-- name: DeleteEntryResponses :exec
 DELETE FROM entry_responses WHERE entry_id = $1
 `
 
-// Everyone's answers to an entry, for when its date moves.
+// Everyone's answers to an entry, for when its dates change.
 func (q *Queries) DeleteEntryResponses(ctx context.Context, entryID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteEntryResponses, entryID)
 	return err
@@ -134,7 +121,7 @@ func (q *Queries) DeleteMemberEntryResponses(ctx context.Context, arg DeleteMemb
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, calendar_id, title, day, color, created_by, created_at, updated_at FROM entries WHERE id = $1 AND calendar_id = $2
+SELECT id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day FROM entries WHERE id = $1 AND calendar_id = $2
 `
 
 type GetEntryParams struct {
@@ -154,12 +141,13 @@ func (q *Queries) GetEntry(ctx context.Context, arg GetEntryParams) (Entry, erro
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EndDay,
 	)
 	return i, err
 }
 
 const getEntryWithCreator = `-- name: GetEntryWithCreator :one
-SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
@@ -176,6 +164,7 @@ type GetEntryWithCreatorRow struct {
 	CalendarID       uuid.UUID  `json:"calendar_id"`
 	Title            string     `json:"title"`
 	Day              time.Time  `json:"day"`
+	EndDay           time.Time  `json:"end_day"`
 	Color            string     `json:"color"`
 	CreatedBy        *uuid.UUID `json:"created_by"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -192,6 +181,7 @@ func (q *Queries) GetEntryWithCreator(ctx context.Context, arg GetEntryWithCreat
 		&i.CalendarID,
 		&i.Title,
 		&i.Day,
+		&i.EndDay,
 		&i.Color,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -203,18 +193,18 @@ func (q *Queries) GetEntryWithCreator(ctx context.Context, arg GetEntryWithCreat
 }
 
 const listEntriesBetween = `-- name: ListEntriesBetween :many
-SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
-WHERE e.calendar_id = $1 AND e.day >= $2 AND e.day < $3
+WHERE e.calendar_id = $1 AND e.day < $2 AND e.end_day >= $3
 ORDER BY e.day, e.created_at, e.id
 `
 
 type ListEntriesBetweenParams struct {
 	CalendarID uuid.UUID `json:"calendar_id"`
-	FromDay    time.Time `json:"from_day"`
 	UntilDay   time.Time `json:"until_day"`
+	FromDay    time.Time `json:"from_day"`
 }
 
 type ListEntriesBetweenRow struct {
@@ -222,6 +212,7 @@ type ListEntriesBetweenRow struct {
 	CalendarID       uuid.UUID  `json:"calendar_id"`
 	Title            string     `json:"title"`
 	Day              time.Time  `json:"day"`
+	EndDay           time.Time  `json:"end_day"`
 	Color            string     `json:"color"`
 	CreatedBy        *uuid.UUID `json:"created_by"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -230,9 +221,10 @@ type ListEntriesBetweenRow struct {
 	CreatorAvatarKey *string    `json:"creator_avatar_key"`
 }
 
-// Entries from `from` up to, not including, `until`, by day and then in the order they were added.
+// Entries that overlap the days from `from` up to, not including, `until`,
+// by first day and then in the order they were added.
 func (q *Queries) ListEntriesBetween(ctx context.Context, arg ListEntriesBetweenParams) ([]ListEntriesBetweenRow, error) {
-	rows, err := q.db.Query(ctx, listEntriesBetween, arg.CalendarID, arg.FromDay, arg.UntilDay)
+	rows, err := q.db.Query(ctx, listEntriesBetween, arg.CalendarID, arg.UntilDay, arg.FromDay)
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +237,7 @@ func (q *Queries) ListEntriesBetween(ctx context.Context, arg ListEntriesBetween
 			&i.CalendarID,
 			&i.Title,
 			&i.Day,
+			&i.EndDay,
 			&i.Color,
 			&i.CreatedBy,
 			&i.CreatedAt,
@@ -298,12 +291,43 @@ func (q *Queries) ListEntryResponses(ctx context.Context, entryIds []uuid.UUID) 
 	return items, nil
 }
 
+const mostEntriesOnADay = `-- name: MostEntriesOnADay :one
+SELECT COALESCE(max(n), 0)::int FROM (
+    SELECT count(*) AS n
+    FROM generate_series($1::date, $2::date, interval '1 day') AS d (day)
+    JOIN entries e ON e.calendar_id = $3 AND e.day <= d.day::date AND e.end_day >= d.day::date
+    WHERE e.id <> $4
+    GROUP BY d.day
+) per_day
+`
+
+type MostEntriesOnADayParams struct {
+	FirstDay   time.Time `json:"first_day"`
+	LastDay    time.Time `json:"last_day"`
+	CalendarID uuid.UUID `json:"calendar_id"`
+	ExceptID   uuid.UUID `json:"except_id"`
+}
+
+// The most entries on any one day from `first_day` to `last_day`, leaving out
+// the entry `except_id`.
+func (q *Queries) MostEntriesOnADay(ctx context.Context, arg MostEntriesOnADayParams) (int32, error) {
+	row := q.db.QueryRow(ctx, mostEntriesOnADay,
+		arg.FirstDay,
+		arg.LastDay,
+		arg.CalendarID,
+		arg.ExceptID,
+	)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const nextEntry = `-- name: NextEntry :one
-SELECT e.id, e.calendar_id, e.title, e.day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
-WHERE e.calendar_id = $1 AND e.day >= $2
+WHERE e.calendar_id = $1 AND e.end_day >= $2
 ORDER BY e.day, e.created_at, e.id
 LIMIT 1
 `
@@ -318,6 +342,7 @@ type NextEntryRow struct {
 	CalendarID       uuid.UUID  `json:"calendar_id"`
 	Title            string     `json:"title"`
 	Day              time.Time  `json:"day"`
+	EndDay           time.Time  `json:"end_day"`
 	Color            string     `json:"color"`
 	CreatedBy        *uuid.UUID `json:"created_by"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -326,7 +351,8 @@ type NextEntryRow struct {
 	CreatorAvatarKey *string    `json:"creator_avatar_key"`
 }
 
-// The first entry on or after `from_day`, by day and then in the order they were added.
+// The first entry that has not ended before `from_day`, so one that is still
+// running comes first; by first day and then in the order they were added.
 func (q *Queries) NextEntry(ctx context.Context, arg NextEntryParams) (NextEntryRow, error) {
 	row := q.db.QueryRow(ctx, nextEntry, arg.CalendarID, arg.FromDay)
 	var i NextEntryRow
@@ -335,6 +361,7 @@ func (q *Queries) NextEntry(ctx context.Context, arg NextEntryParams) (NextEntry
 		&i.CalendarID,
 		&i.Title,
 		&i.Day,
+		&i.EndDay,
 		&i.Color,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -366,14 +393,15 @@ func (q *Queries) SetEntryResponse(ctx context.Context, arg SetEntryResponsePara
 
 const updateEntry = `-- name: UpdateEntry :one
 UPDATE entries
-SET title = $1, day = $2, color = $3, updated_at = now()
-WHERE id = $4 AND calendar_id = $5
-RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at
+SET title = $1, day = $2, end_day = $3, color = $4, updated_at = now()
+WHERE id = $5 AND calendar_id = $6
+RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day
 `
 
 type UpdateEntryParams struct {
 	Title      string    `json:"title"`
 	Day        time.Time `json:"day"`
+	EndDay     time.Time `json:"end_day"`
 	Color      string    `json:"color"`
 	ID         uuid.UUID `json:"id"`
 	CalendarID uuid.UUID `json:"calendar_id"`
@@ -383,6 +411,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (Entry
 	row := q.db.QueryRow(ctx, updateEntry,
 		arg.Title,
 		arg.Day,
+		arg.EndDay,
 		arg.Color,
 		arg.ID,
 		arg.CalendarID,
@@ -397,6 +426,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (Entry
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EndDay,
 	)
 	return i, err
 }

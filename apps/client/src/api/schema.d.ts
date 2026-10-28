@@ -461,13 +461,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** The entries of one month */
+        /**
+         * The entries of one month
+         * @description Every entry that overlaps the month, so a trip from Oct 30 to Nov 2 is in
+         *     both October and November.
+         */
         get: operations["listEntries"];
         put?: never;
         /**
          * Add an entry (owner and editors)
-         * @description Error codes: `invalid_title`, `invalid_date`, `invalid_color`, `forbidden`,
-         *     `day_full` (20 entries on that day), `too_many_entries` (5000 in the calendar).
+         * @description Error codes: `invalid_title`, `invalid_date`, `invalid_end_date` (before the
+         *     start date, or more than 31 days long), `invalid_color`, `forbidden`,
+         *     `day_full` (20 entries on one of its days), `too_many_entries` (5000 in the calendar).
          */
         post: operations["createEntry"];
         delete?: never;
@@ -487,8 +492,9 @@ export interface paths {
         };
         /**
          * The next entry from a day on
-         * @description The first entry on or after `from`, for the "Next up" card. Clients send
-         *     their local today, since the server does not know their time zone.
+         * @description The first entry that has not ended before `from`, for the "Next up" card:
+         *     an entry that is still running on `from` comes first. Clients send their
+         *     local today, since the server does not know their time zone.
          *     Error codes: `invalid_date`.
          */
         get: operations["getNextEntry"];
@@ -523,7 +529,8 @@ export interface paths {
         head?: never;
         /**
          * Change an entry (owner and editors)
-         * @description Moving an entry to another date clears everyone's answers.
+         * @description Changing the start or end date clears everyone's answers. A new `date`
+         *     without an `endDate` keeps the entry's length.
          *     Error codes as for creating, plus `entry_not_found`.
          */
         patch: operations["updateEntry"];
@@ -695,6 +702,12 @@ export interface components {
          */
         EntryDate: string;
         /**
+         * Format: date
+         * @description The entry's last day, YYYY-MM-DD. On or after `date`, and at most 30 days
+         *     after it (31 days long). Defaults to `date` when creating.
+         */
+        EntryEndDate: string;
+        /**
          * @description One of the preset entry colors.
          * @enum {string}
          */
@@ -706,6 +719,7 @@ export interface components {
             id: string;
             title: string;
             date: components["schemas"]["EntryDate"];
+            endDate: components["schemas"]["EntryEndDate"];
             color: components["schemas"]["EntryColor"];
             /** @description Who added it; null once their account is deleted. */
             createdBy: components["schemas"]["Person"] | null;
@@ -1518,7 +1532,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Entries by date, then in the order they were added */
+            /** @description Entries by first date, then in the order they were added */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1549,6 +1563,7 @@ export interface operations {
                 "application/json": {
                     title: components["schemas"]["EntryTitle"];
                     date: components["schemas"]["EntryDate"];
+                    endDate?: components["schemas"]["EntryEndDate"];
                     color: components["schemas"]["EntryColor"];
                 };
             };
@@ -1666,6 +1681,7 @@ export interface operations {
                 "application/json": {
                     title?: components["schemas"]["EntryTitle"];
                     date?: components["schemas"]["EntryDate"];
+                    endDate?: components["schemas"]["EntryEndDate"];
                     color?: components["schemas"]["EntryColor"];
                 };
             };

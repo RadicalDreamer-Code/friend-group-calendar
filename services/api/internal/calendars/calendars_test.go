@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/store"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/testutil"
@@ -80,12 +81,13 @@ func TestNormalizeName(t *testing.T) {
 type fixture struct {
 	svc *Service
 	q   *store.Queries
+	db  *pgxpool.Pool
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	pool := testutil.DB(t)
-	return &fixture{svc: NewService(pool), q: store.New(pool)}
+	return &fixture{svc: NewService(pool), q: store.New(pool), db: pool}
 }
 
 func (f *fixture) user(t *testing.T, username string) uuid.UUID {

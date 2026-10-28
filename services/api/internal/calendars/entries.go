@@ -22,6 +22,8 @@ const (
 	MaxEntriesPerDay = 20
 	// MaxEntries bounds one calendar.
 	MaxEntries = 5000
+	// MaxEntryDays is the longest an entry can last, both ends included.
+	MaxEntryDays = 31
 
 	dateLayout  = "2006-01-02"
 	monthLayout = "2006-01"
@@ -39,9 +41,11 @@ var Colors = []string{"fjord", "sage", "clay", "rose", "plum", "sand", "moss", "
 var (
 	ErrInvalidTitle = fmt.Errorf("entry names are 1–%d characters", MaxTitleLength)
 	ErrInvalidDate  = errors.New("dates are YYYY-MM-DD, from 2000 to 2099")
-	ErrInvalidMonth = errors.New("months are YYYY-MM, from 2000 to 2099")
-	ErrInvalidColor = errors.New("unknown entry color")
-	ErrInvalidReply = errors.New("the answer must be accepted or declined")
+	// ErrInvalidEndDate: the end is before the start or too far after it.
+	ErrInvalidEndDate = fmt.Errorf("an entry ends on or after its first day and lasts at most %d days", MaxEntryDays)
+	ErrInvalidMonth   = errors.New("months are YYYY-MM, from 2000 to 2099")
+	ErrInvalidColor   = errors.New("unknown entry color")
+	ErrInvalidReply   = errors.New("the answer must be accepted or declined")
 	// ErrEntryNotFound: no such entry in this calendar.
 	ErrEntryNotFound  = errors.New("entry not found")
 	ErrDayFull        = fmt.Errorf("a day can have at most %d entries", MaxEntriesPerDay)
@@ -67,15 +71,17 @@ func ParseReply(s string) (Reply, error) {
 	return "", ErrInvalidReply
 }
 
-// Entry is one whole-day entry with everyone's answers. Members who are
+// Entry runs over one or more whole days and carries everyone's answers. Members who are
 // in neither list have not answered.
 type Entry struct {
 	ID         uuid.UUID
 	CalendarID uuid.UUID
 	Title      string
-	// Day is midnight UTC of the entry's date.
-	Day   time.Time
-	Color string
+	// Day is midnight UTC of the entry's first date, EndDay of its last.
+	// They are the same day for single-day entries.
+	Day    time.Time
+	EndDay time.Time
+	Color  string
 	// CreatedBy is nil once the account that added it is deleted.
 	CreatedBy *Person
 	CreatedAt time.Time
@@ -129,6 +135,17 @@ func ParseMonth(s string) (time.Time, error) {
 	return m, nil
 }
 
+// checkSpan fails unless an entry from day to end lasts 1 to MaxEntryDays days.
+func checkSpan(day, end time.Time) error {
+	if end.After(LastDay) {
+		return ErrInvalidDate
+	}
+	if end.Before(day) || end.After(day.AddDate(0, 0, MaxEntryDays-1)) {
+		return ErrInvalidEndDate
+	}
+	return nil
+}
+
 func parseColor(s string) (string, error) {
 	if !slices.Contains(Colors, s) {
 		return "", ErrInvalidColor
@@ -136,21 +153,25 @@ func parseColor(s string) (string, error) {
 	return s, nil
 }
 
-// EntryInput is a new entry as the user typed it.
+// EntryInput is a new entry as the user typed it. An empty EndDate makes
+// it a single-day entry.
 type EntryInput struct {
-	Title string
-	Date  string
-	Color string
+	Title   string
+	Date    string
+	EndDate string
+	Color   string
 }
 
-// EntryChanges to an entry; nil fields stay as they are.
+// EntryChanges to an entry; nil fields stay as they are. A new Date
+// without an EndDate keeps the entry's length.
 type EntryChanges struct {
-	Title *string
-	Date  *string
-	Color *string
+	Title   *string
+	Date    *string
+	EndDate *string
+	Color   *string
 }
 
-// ListEntries returns the entries of one month (YYYY-MM).
+// ListEntries returns the entries that overlap one month (YYYY-MM).
 func (s *Service) ListEntries(ctx context.Context, calendarID, userID uuid.UUID, month string) ([]Entry, error) {
 	from, err := ParseMonth(month)
 	if err != nil {
@@ -172,8 +193,9 @@ func (s *Service) ListEntries(ctx context.Context, calendarID, userID uuid.UUID,
 	return s.withReplies(ctx, entries)
 }
 
-// NextEntry returns the first entry on or after the day `from` (YYYY-MM-DD),
-// the client's local today. ok is false when nothing is planned from then on.
+// NextEntry returns the first entry that has not ended before the day `from`
+// (YYYY-MM-DD), the client's local today, so an entry that is still running
+// comes first. ok is false when nothing is planned from then on.
 func (s *Service) NextEntry(ctx context.Context, calendarID, userID uuid.UUID, from string) (e Entry, ok bool, err error) {
 	day, err := ParseDate(from)
 	if err != nil {
@@ -213,13 +235,22 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 	if err != nil {
 		return Entry{}, err
 	}
+	end := day
+	if in.EndDate != "" {
+		if end, err = ParseDate(in.EndDate); err != nil {
+			return Entry{}, err
+		}
+	}
+	if err := checkSpan(day, end); err != nil {
+		return Entry{}, err
+	}
 	color, err := parseColor(in.Color)
 	if err != nil {
 		return Entry{}, err
 	}
 	var id uuid.UUID
 	err = s.change(ctx, calendarID, userID, ActionEditEntries, func(q *store.Queries, cal store.Calendar, _ Membership) error {
-		if err := checkRoom(ctx, q, cal.ID, day); err != nil {
+		if err := checkRoom(ctx, q, cal.ID, day, end, uuid.Nil); err != nil {
 			return err
 		}
 		total, err := q.CountEntries(ctx, cal.ID)
@@ -230,7 +261,7 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 			return ErrTooManyEntries
 		}
 		e, err := q.CreateEntry(ctx, store.CreateEntryParams{
-			CalendarID: cal.ID, Title: title, Day: day, Color: color, CreatedBy: &userID,
+			CalendarID: cal.ID, Title: title, Day: day, EndDay: end, Color: color, CreatedBy: &userID,
 		})
 		id = e.ID
 		return err
@@ -241,12 +272,13 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 	return s.loadEntry(ctx, calendarID, id)
 }
 
-// UpdateEntry changes an entry; the owner and editors may. Moving it to
-// another day clears everyone's answers, since they were for the old day.
+// UpdateEntry changes an entry; the owner and editors may. Changing its
+// first or last day clears everyone's answers, since they were for the old
+// days.
 func (s *Service) UpdateEntry(ctx context.Context, calendarID, userID, entryID uuid.UUID, c EntryChanges) (Entry, error) {
 	var (
 		title, color string
-		day          time.Time
+		day, end     time.Time
 		err          error
 	)
 	if c.Title != nil {
@@ -256,6 +288,11 @@ func (s *Service) UpdateEntry(ctx context.Context, calendarID, userID, entryID u
 	}
 	if c.Date != nil {
 		if day, err = ParseDate(*c.Date); err != nil {
+			return Entry{}, err
+		}
+	}
+	if c.EndDate != nil {
+		if end, err = ParseDate(*c.EndDate); err != nil {
 			return Entry{}, err
 		}
 	}
@@ -269,21 +306,30 @@ func (s *Service) UpdateEntry(ctx context.Context, calendarID, userID, entryID u
 		if err != nil {
 			return err
 		}
-		params := store.UpdateEntryParams{ID: e.ID, CalendarID: cal.ID, Title: e.Title, Day: e.Day, Color: e.Color}
+		params := store.UpdateEntryParams{ID: e.ID, CalendarID: cal.ID, Title: e.Title, Day: e.Day, EndDay: e.EndDay, Color: e.Color}
 		if c.Title != nil {
 			params.Title = title
 		}
 		if c.Color != nil {
 			params.Color = color
 		}
-		if c.Date != nil && !day.Equal(e.Day) {
-			if err := checkRoom(ctx, q, cal.ID, day); err != nil {
+		if c.Date != nil {
+			params.Day = day
+			params.EndDay = day.Add(e.EndDay.Sub(e.Day))
+		}
+		if c.EndDate != nil {
+			params.EndDay = end
+		}
+		if !params.Day.Equal(e.Day) || !params.EndDay.Equal(e.EndDay) {
+			if err := checkSpan(params.Day, params.EndDay); err != nil {
+				return err
+			}
+			if err := checkRoom(ctx, q, cal.ID, params.Day, params.EndDay, e.ID); err != nil {
 				return err
 			}
 			if err := q.DeleteEntryResponses(ctx, e.ID); err != nil {
 				return fmt.Errorf("clear responses: %w", err)
 			}
-			params.Day = day
 		}
 		_, err = q.UpdateEntry(ctx, params)
 		return err
@@ -331,11 +377,14 @@ func (s *Service) Respond(ctx context.Context, calendarID, userID, entryID uuid.
 	return s.loadEntry(ctx, calendarID, entryID)
 }
 
-// checkRoom fails when the day already has MaxEntriesPerDay entries.
-func checkRoom(ctx context.Context, q *store.Queries, calendarID uuid.UUID, day time.Time) error {
-	n, err := q.CountEntriesOnDay(ctx, store.CountEntriesOnDayParams{CalendarID: calendarID, Day: day})
+// checkRoom fails when any day from first to last already has
+// MaxEntriesPerDay entries, not counting the entry `except`.
+func checkRoom(ctx context.Context, q *store.Queries, calendarID uuid.UUID, first, last time.Time, except uuid.UUID) error {
+	n, err := q.MostEntriesOnADay(ctx, store.MostEntriesOnADayParams{
+		CalendarID: calendarID, FirstDay: first, LastDay: last, ExceptID: except,
+	})
 	if err != nil {
-		return fmt.Errorf("count entries on day: %w", err)
+		return fmt.Errorf("count entries per day: %w", err)
 	}
 	if n >= MaxEntriesPerDay {
 		return ErrDayFull
@@ -400,6 +449,7 @@ func entry(r store.GetEntryWithCreatorRow) Entry {
 		CalendarID: r.CalendarID,
 		Title:      r.Title,
 		Day:        r.Day,
+		EndDay:     r.EndDay,
 		Color:      r.Color,
 		CreatedAt:  r.CreatedAt,
 		UpdatedAt:  r.UpdatedAt,
