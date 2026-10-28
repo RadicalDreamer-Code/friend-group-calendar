@@ -184,6 +184,48 @@ type EntryInput struct {
 	Cover   string
 }
 
+// Validate reports the error CreateEntry would give for in, without looking
+// at the calendar.
+func (in EntryInput) Validate() error {
+	_, err := in.parse()
+	return err
+}
+
+type parsedEntry struct {
+	title, color string
+	day, end     time.Time
+	cover        *string
+}
+
+func (in EntryInput) parse() (parsedEntry, error) {
+	title, err := NormalizeTitle(in.Title)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	day, err := ParseDate(in.Date)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	end := day
+	if in.EndDate != "" {
+		if end, err = ParseDate(in.EndDate); err != nil {
+			return parsedEntry{}, err
+		}
+	}
+	if err := checkSpan(day, end); err != nil {
+		return parsedEntry{}, err
+	}
+	color, err := parseColor(in.Color)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	cover, err := parseCover(in.Cover)
+	if err != nil {
+		return parsedEntry{}, err
+	}
+	return parsedEntry{title: title, color: color, day: day, end: end, cover: cover}, nil
+}
+
 // EntryChanges to an entry; nil fields stay as they are. A new Date
 // without an EndDate keeps the entry's length, and an empty Cover removes
 // the cover.
@@ -274,34 +316,13 @@ func (s *Service) GetEntry(ctx context.Context, calendarID, userID, entryID uuid
 
 // CreateEntry adds an entry; the owner and editors may.
 func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID, in EntryInput) (Entry, error) {
-	title, err := NormalizeTitle(in.Title)
-	if err != nil {
-		return Entry{}, err
-	}
-	day, err := ParseDate(in.Date)
-	if err != nil {
-		return Entry{}, err
-	}
-	end := day
-	if in.EndDate != "" {
-		if end, err = ParseDate(in.EndDate); err != nil {
-			return Entry{}, err
-		}
-	}
-	if err := checkSpan(day, end); err != nil {
-		return Entry{}, err
-	}
-	color, err := parseColor(in.Color)
-	if err != nil {
-		return Entry{}, err
-	}
-	cover, err := parseCover(in.Cover)
+	p, err := in.parse()
 	if err != nil {
 		return Entry{}, err
 	}
 	var id uuid.UUID
 	err = s.change(ctx, calendarID, userID, ActionEditEntries, func(q *store.Queries, cal store.Calendar, _ Membership) error {
-		if err := checkRoom(ctx, q, cal.ID, day, end, uuid.Nil); err != nil {
+		if err := checkRoom(ctx, q, cal.ID, p.day, p.end, uuid.Nil); err != nil {
 			return err
 		}
 		total, err := q.CountEntries(ctx, cal.ID)
@@ -312,7 +333,7 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 			return ErrTooManyEntries
 		}
 		e, err := q.CreateEntry(ctx, store.CreateEntryParams{
-			CalendarID: cal.ID, Title: title, Day: day, EndDay: end, Color: color, Cover: cover, CreatedBy: &userID,
+			CalendarID: cal.ID, Title: p.title, Day: p.day, EndDay: p.end, Color: p.color, Cover: p.cover, CreatedBy: &userID,
 		})
 		id = e.ID
 		return err

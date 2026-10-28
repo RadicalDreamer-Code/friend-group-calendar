@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { API_URL, api, unwrap } from './client';
 
-const tokensQueryKey = ['api-tokens'] as const;
+export const tokensQueryKey = ['api-tokens'] as const;
 
 export const tokenNameMaxLength = 40;
 /** How many live tokens a user can have; the API refuses more. */

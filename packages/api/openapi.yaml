@@ -304,6 +304,7 @@ paths:
     post:
       operationId: revokeOtherSessions
       summary: Sign out every other device
+      description: Also revokes every personal access token, since one could have been made from another session.
       responses:
         "204":
           description: Signed out

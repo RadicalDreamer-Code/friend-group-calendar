@@ -309,6 +309,11 @@ func TestMCPListEntries(t *testing.T) {
 		t.Fatalf("from only = %s to %s, %d entries", out.From, out.To, len(out.Entries))
 	}
 
+	// The default end stops at the last day entries can be on.
+	if text, isErr := callTool(t, ada, "list_entries", map[string]any{"calendar_id": g.calID, "from": "2099-12-20"}, &out); isErr || out.To != "2099-12-31" {
+		t.Fatalf("from late 2099 = %q, to %s", text, out.To)
+	}
+
 	for name, args := range map[string]map[string]any{
 		"93 days":       {"calendar_id": g.calID, "from": "2026-01-01", "to": "2026-04-03"},
 		"backwards":     {"calendar_id": g.calID, "from": "2026-11-02", "to": "2026-11-01"},
@@ -402,6 +407,13 @@ func TestMCPCreateEntry(t *testing.T) {
 func TestMCPCreateEntryRateLimited(t *testing.T) {
 	g := newMCPGroup(t)
 	bob := g.api.mustConnectMCP(t, g.bobToken)
+	// Calls the service turns down do not use up the budget.
+	for range 5 {
+		args := map[string]any{"calendar_id": g.calID, "title": "x", "date": "2026-11-02", "end_date": "2026-11-01"}
+		if text, isErr := callTool(t, bob, "create_entry", args, nil); !isErr || !strings.Contains(text, "end_date") {
+			t.Fatalf("backwards trip = %q, want an end_date error", text)
+		}
+	}
 	for i := range 30 {
 		// Spread over two days; a day holds at most 20 entries.
 		date := "2026-11-01"

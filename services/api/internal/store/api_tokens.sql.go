@@ -179,6 +179,26 @@ func (q *Queries) RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) 
 	return result.RowsAffected(), nil
 }
 
+const revokeAllAPITokens = `-- name: RevokeAllAPITokens :execrows
+UPDATE api_tokens SET revoked_at = $1::timestamptz
+WHERE user_id = $2 AND revoked_at IS NULL AND expires_at > $1::timestamptz
+`
+
+type RevokeAllAPITokensParams struct {
+	Now    time.Time `json:"now"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// Signing out every other device also ends every access token, so a stolen
+// session cannot leave a token behind.
+func (q *Queries) RevokeAllAPITokens(ctx context.Context, arg RevokeAllAPITokensParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAllAPITokens, arg.Now, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const touchAPIToken = `-- name: TouchAPIToken :exec
 UPDATE api_tokens SET last_used_at = $1::timestamptz WHERE id = $2
 `

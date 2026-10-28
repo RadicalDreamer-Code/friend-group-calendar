@@ -190,7 +190,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign out every other device */
+        /**
+         * Sign out every other device
+         * @description Also revokes every personal access token, since one could have been made from another session.
+         */
         post: operations["revokeOtherSessions"];
         delete?: never;
         options?: never;
@@ -215,7 +218,7 @@ export interface paths {
          * Create a personal access token for the MCP endpoint
          * @description The token is in the response this one time and is never shown again.
          *     Error codes: `invalid_token_name`, `invalid_expiry`, `too_many_tokens`
-         *     (10 live tokens), `rate_limited` (10 an hour).
+         *     (10 live tokens), `rate_limited` (20 an hour).
          */
         post: operations["createApiToken"];
         delete?: never;

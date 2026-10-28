@@ -199,7 +199,7 @@ function DevicesSection() {
   const onRevokeOthers = async () => {
     const ok = await confirm({
       title: 'Sign out of all other devices?',
-      message: 'You stay signed in on this device.',
+      message: 'You stay signed in on this device. Your access tokens are revoked too.',
       confirmLabel: 'Sign out others',
       destructive: true,
     });

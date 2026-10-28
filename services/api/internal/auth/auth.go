@@ -355,9 +355,29 @@ func (s *Service) RevokeSession(ctx context.Context, userID, sessionID uuid.UUID
 	return n > 0, err
 }
 
-// RevokeOtherSessions signs out every session of the user except keep.
+// RevokeOtherSessions signs out every session of the user except keep, and
+// revokes all of their access tokens: someone who got hold of a session
+// could have made one, and it would outlast the session. It reports how many
+// sessions it ended.
 func (s *Service) RevokeOtherSessions(ctx context.Context, userID, keep uuid.UUID) (int64, error) {
-	return s.q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{Now: s.now(), UserID: userID, KeepID: keep})
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+	q := s.q.WithTx(tx)
+	now := s.now()
+	n, err := q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{Now: now, UserID: userID, KeepID: keep})
+	if err != nil {
+		return 0, fmt.Errorf("revoke sessions: %w", err)
+	}
+	if _, err := q.RevokeAllAPITokens(ctx, store.RevokeAllAPITokensParams{Now: now, UserID: userID}); err != nil {
+		return 0, fmt.Errorf("revoke access tokens: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // Cleanup removes expired codes and long-dead sessions and access tokens.

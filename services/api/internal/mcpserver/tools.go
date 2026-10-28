@@ -101,7 +101,13 @@ func (t *tools) listEntries(ctx context.Context, _ *mcp.CallToolRequest, in list
 		if err != nil {
 			return nil, listEntriesOut{}, explain(ctx, err)
 		}
-		to = calendars.FormatDate(day.AddDate(0, 0, DefaultRangeDays))
+		// Capped at the last day entries can be on, so a `from` late in 2099
+		// does not end in a range ListEntriesRange refuses.
+		last := day.AddDate(0, 0, DefaultRangeDays)
+		if last.After(calendars.LastDay) {
+			last = calendars.LastDay
+		}
+		to = calendars.FormatDate(last)
 	}
 	cal, err := t.s.calendars.Get(ctx, id, t.p.User.ID)
 	if err != nil {
@@ -157,16 +163,22 @@ func (t *tools) createEntry(ctx context.Context, _ *mcp.CallToolRequest, in crea
 		// attempts from counting against the rate limit.
 		return nil, entryOut{}, explain(ctx, calendars.ErrForbidden)
 	}
-	if ok, wait := t.s.creates.Allow(t.p.User.ID.String()); !ok {
-		return nil, entryOut{}, explain(ctx, &auth.RateLimitError{RetryAfter: wait})
-	}
-	e, err := t.s.calendars.CreateEntry(ctx, id, t.p.User.ID, calendars.EntryInput{
+	input := calendars.EntryInput{
 		Title:   in.Title,
 		Date:    in.Date,
 		EndDate: in.EndDate,
 		Color:   cmp.Or(in.Color, calendars.Colors[0]),
 		Cover:   in.Cover,
-	})
+	}
+	// Bad input does not count against the rate limit either, so a model
+	// that fixes its mistakes is not locked out.
+	if err := input.Validate(); err != nil {
+		return nil, entryOut{}, explain(ctx, err)
+	}
+	if ok, wait := t.s.creates.Allow(t.p.User.ID.String()); !ok {
+		return nil, entryOut{}, explain(ctx, &auth.RateLimitError{RetryAfter: wait})
+	}
+	e, err := t.s.calendars.CreateEntry(ctx, id, t.p.User.ID, input)
 	if err != nil {
 		return nil, entryOut{}, explain(ctx, err)
 	}
