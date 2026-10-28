@@ -8,10 +8,11 @@ import { isOn, isTrip, replyOf, useMonthEntries } from '@/api/entries';
 import { useUser } from '@/auth/session';
 import { CalendarError } from '@/components/CalendarError';
 import { CardRow } from '@/components/CardRow';
+import { CoverIcon } from '@/components/CoverIcon';
 import { ErrorState, RefreshError } from '@/components/ErrorState';
 import { IconButton } from '@/components/IconButton';
 import { Icon } from '@/components/Icon';
-import { MonthCalendar, type TripBand } from '@/components/MonthCalendar';
+import { MonthCalendar, type DayMark, type TripBand } from '@/components/MonthCalendar';
 import { NextUpCard } from '@/components/NextUpCard';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
@@ -83,7 +84,7 @@ function Month({
   const changeMonth = (next: string) => select(monthOf(today()) === next ? today() : `${next}-01`);
   const addEntry = () => router.push({ pathname: '/edit-entry', params: { calendarId: calendar.id, date: selected } });
 
-  const { dots, bands } = useMemo(() => marks(entries.data ?? [], month), [entries.data, month]);
+  const { marks, bands } = useMemo(() => monthMarks(entries.data ?? [], month), [entries.data, month]);
 
   // The month grid stays usable with what was loaded before; only a first load that fails replaces the day list.
   const refreshError = calendarQuery.isRefetchError
@@ -125,7 +126,7 @@ function Month({
           onMonthChange={changeMonth}
           selected={selected}
           onSelect={select}
-          dots={dots}
+          marks={marks}
           bands={bands}
         />
       </View>
@@ -181,8 +182,8 @@ function DayEntries({
 }
 
 /**
- * One plan on the selected day: a soft card with its color tile, title and
- * countdown, or for a trip which of its days this is.
+ * One plan on the selected day: a soft card with its color tile and cover
+ * icon, title and countdown, or for a trip which of its days this is.
  */
 function EntryCard({ calendarId, entry, date, me }: { calendarId: string; entry: Entry; date: string; me: string }) {
   const styles = useStyles();
@@ -198,7 +199,11 @@ function EntryCard({ calendarId, entry, date, me }: { calendarId: string; entry:
       style={styles.card}
     >
       <View style={[styles.tile, { backgroundColor: entryColor(entry.color) }]} aria-hidden>
-        <Icon name="sparkles" size={20} color={entryInk} />
+        {entry.cover ? (
+          <CoverIcon cover={entry.cover} size={22} color={entryInk} />
+        ) : (
+          <Icon name="sparkles" size={20} color={entryInk} />
+        )}
       </View>
       <View style={styles.cardText}>
         <Text variant="cardTitle" numberOfLines={1}>
@@ -252,17 +257,20 @@ function AddCard({ empty, onAdd }: { empty: boolean; onAdd?: () => void }) {
 
 /**
  * What the month grid draws for a month's entries: a mustard band across the
- * days of a trip, and a dot per entry for the rest. Where trips overlap, the
- * first one gets the band and the others a dot.
+ * days of a trip, and a mark per entry for the rest. Where trips overlap, the
+ * first one gets the band and the others a mark.
  */
-function marks(entries: Entry[], month: string): { dots: Record<string, string[]>; bands: Record<string, TripBand> } {
-  const dots: Record<string, string[]> = {};
+function monthMarks(
+  entries: Entry[],
+  month: string,
+): { marks: Record<string, DayMark[]>; bands: Record<string, TripBand> } {
+  const marks: Record<string, DayMark[]> = {};
   const banded: Record<string, Entry> = {};
   for (const e of entries) {
     for (const day of daysOfMonth(month)) {
       if (!isOn(e, day)) continue;
       if (isTrip(e) && !banded[day]) banded[day] = e;
-      else (dots[day] ??= []).push(entryColor(e.color));
+      else (marks[day] ??= []).push({ color: entryColor(e.color), cover: e.cover });
     }
   }
   const bands: Record<string, TripBand> = {};
@@ -274,7 +282,7 @@ function marks(entries: Entry[], month: string): { dots: Record<string, string[]
       end: day === trip.endDate || other(addDays(day, 1)),
     };
   }
-  return { dots, bands };
+  return { marks, bands };
 }
 
 /** "You’re going", "You + 2 going", "You declined · 3 going", "3 going", "No answers yet". */

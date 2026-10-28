@@ -32,6 +32,12 @@ export function addMonths(month: string, n: number): string {
   return toISODate(new Date(y, m - 1 + n, 1)).slice(0, 7);
 }
 
+/** The day `n` days after (or before) a YYYY-MM-DD day. */
+export function addDays(date: string, n: number): string {
+  const d = fromISODate(date);
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+}
+
 /** Every day of a YYYY-MM month as YYYY-MM-DD. */
 export function daysOfMonth(month: string): string[] {
   const [y, m] = month.split('-').map(Number);
@@ -137,12 +143,6 @@ export function formatShortDay(date: string, now = today()): string {
 export function relativeDay(date: string, now = today()): string {
   const near = nearDay(daysFrom(date, now));
   return near ? capitalize(near) : formatDay(date, now);
-}
-
-/** The YYYY-MM-DD day `n` days after (or before) a day. */
-export function addDays(date: string, n: number): string {
-  const d = fromISODate(date);
-  return toISODate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
 }
 
 /** How many days a stretch from `start` to `end` covers, both included: 4 for Oct 26 to Oct 29. */

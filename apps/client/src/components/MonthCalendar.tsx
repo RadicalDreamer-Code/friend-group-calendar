@@ -20,11 +20,13 @@ import {
   today as getToday,
   weekdayNames,
 } from '@/lib/dates';
+import type { EntryCover } from '@/api/client';
 import { haptics } from '@/lib/haptics';
 import { createStyles, useTheme } from '@/theme/ThemeProvider';
 import { motion, radius, space } from '@/theme/tokens';
 
 import { Button } from './Button';
+import { CoverIcon } from './CoverIcon';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
@@ -34,10 +36,13 @@ import { Text } from './Text';
  */
 export type TripBand = { start: boolean; end: boolean };
 
-/** Most dots one day shows; more entries still show as three. */
-const MAX_DOTS = 3;
+/** Most marks one day shows; more entries still show as three. */
+const MAX_MARKS = 3;
 /** How far a swipe has to travel to change the month. */
 const SWIPE_DISTANCE = 40;
+
+/** One entry under a day number: its cover icon in its color, or a dot without a cover. */
+export type DayMark = { color: string; cover: EntryCover | null };
 
 type MonthCalendarProps = {
   /** The month shown, YYYY-MM. */
@@ -45,9 +50,11 @@ type MonthCalendarProps = {
   onMonthChange: (month: string) => void;
   /** The selected day, YYYY-MM-DD. */
   selected: string | null;
+  /** With `selected`, the last day of a range: both ends get the ink circle, the days between a soft band. */
+  rangeEnd?: string | null;
   onSelect: (date: string) => void;
-  /** Entry colors per day, drawn as dots under the day number. */
-  dots?: Record<string, string[]>;
+  /** Entries per day, marked under the day number. */
+  marks?: Record<string, DayMark[]>;
   /** Trip days, drawn as one mustard band behind the day numbers. */
   bands?: Record<string, TripBand>;
   /** Smaller cells, for picking a date in a form. */
@@ -59,7 +66,16 @@ type MonthCalendarProps = {
  * coral, trips are a mustard band and the selected day is an ink circle that
  * springs in.
  */
-export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, bands, compact }: MonthCalendarProps) {
+export function MonthCalendar({
+  month,
+  onMonthChange,
+  selected,
+  rangeEnd,
+  onSelect,
+  marks,
+  bands,
+  compact,
+}: MonthCalendarProps) {
   const styles = useStyles();
   const today = getToday();
   const canGoBack = month > firstMonth;
@@ -139,8 +155,9 @@ export function MonthCalendar({ month, onMonthChange, selected, onSelect, dots, 
             month={month}
             today={today}
             selected={selected}
+            rangeEnd={rangeEnd ?? null}
             onSelect={onSelect}
-            dots={dots}
+            marks={marks}
             bands={bands}
             compact={compact ?? false}
           />
@@ -167,14 +184,20 @@ type DaysProps = {
   month: string;
   today: string;
   selected: string | null;
+  rangeEnd: string | null;
   onSelect: (date: string) => void;
-  dots?: Record<string, string[]>;
+  marks?: Record<string, DayMark[]>;
   bands?: Record<string, TripBand>;
   compact: boolean;
 };
 
-function Days({ month, today, selected, onSelect, dots, bands, compact }: DaysProps) {
+function Days({ month, today, selected, rangeEnd, onSelect, marks, bands, compact }: DaysProps) {
   const styles = useStyles();
+  const ranged = selected !== null && rangeEnd !== null && rangeEnd > selected;
+  const rangeOf = (date: string): DayRange | undefined => {
+    if (!ranged || date < selected || date > rangeEnd) return undefined;
+    return date === selected ? 'start' : date === rangeEnd ? 'end' : 'middle';
+  };
   const cells: (string | null)[] = [...Array<null>(leadingBlanks(month)).fill(null), ...daysOfMonth(month)];
   while (cells.length % 7 !== 0) cells.push(null);
   const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7));
@@ -189,8 +212,9 @@ function Days({ month, today, selected, onSelect, dots, bands, compact }: DaysPr
                 key={date}
                 date={date}
                 isToday={date === today}
-                isSelected={date === selected}
-                colors={dots?.[date]}
+                isSelected={date === selected || (ranged && date === rangeEnd)}
+                range={rangeOf(date)}
+                marks={marks?.[date]}
                 band={compact ? undefined : bands?.[date]}
                 compact={compact}
                 onSelect={onSelect}
@@ -205,20 +229,24 @@ function Days({ month, today, selected, onSelect, dots, bands, compact }: DaysPr
   );
 }
 
+/** Where a day sits in a selected range, for the band behind it. */
+type DayRange = 'start' | 'middle' | 'end';
+
 type DayProps = {
   date: string;
   isToday: boolean;
   isSelected: boolean;
-  colors?: string[];
+  range?: DayRange;
+  marks?: DayMark[];
   band?: TripBand;
   compact: boolean;
   onSelect: (date: string) => void;
 };
 
-const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, band, compact, onSelect }: DayProps) {
+const Day = memo(function Day({ date, isToday, isSelected, range, marks, band, compact, onSelect }: DayProps) {
   const styles = useStyles();
   const { colors } = useTheme();
-  const count = (dayColors?.length ?? 0) + (band ? 1 : 0);
+  const count = (marks?.length ?? 0) + (band ? 1 : 0);
 
   // The ink circle pops in on the newly selected day, not on a day that is
   // selected when the month appears.
@@ -236,6 +264,7 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, ba
   const label = [
     isToday ? 'Today' : null,
     formatDay(date),
+    range === 'start' ? 'first day' : range === 'end' ? 'last day' : range ? 'in the range' : null,
     count > 0 ? `${count} ${count === 1 ? 'entry' : 'entries'}` : null,
   ]
     .filter(Boolean)
@@ -254,8 +283,21 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, ba
     >
       {({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => (
         <>
+          {range ? (
+            <View
+              style={[
+                styles.band,
+                compact && styles.bandCompact,
+                range === 'start' && styles.bandStart,
+                range === 'end' && styles.bandEnd,
+              ]}
+            />
+          ) : null}
           {band ? (
-            <View style={[styles.band, band.start && styles.bandStart, band.end && styles.bandEnd]} aria-hidden />
+            <View
+              style={[styles.tripBand, band.start && styles.tripBandStart, band.end && styles.tripBandEnd]}
+              aria-hidden
+            />
           ) : null}
           <Animated.View
             style={[
@@ -285,10 +327,16 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, ba
             </Text>
           </Animated.View>
           {compact ? null : (
-            <View style={styles.dots}>
-              {dayColors?.slice(0, MAX_DOTS).map((c, i) => (
-                <View key={i} style={[styles.dot, { backgroundColor: c }]} />
-              ))}
+            <View style={styles.marks}>
+              {marks
+                ?.slice(0, MAX_MARKS)
+                .map((m, i) =>
+                  m.cover ? (
+                    <CoverIcon key={i} cover={m.cover} size={MARK_SIZE} color={m.color} />
+                  ) : (
+                    <View key={i} style={[styles.dot, { backgroundColor: m.color }]} />
+                  ),
+                )}
             </View>
           )}
         </>
@@ -299,7 +347,9 @@ const Day = memo(function Day({ date, isToday, isSelected, colors: dayColors, ba
 
 const NUMBER_SIZE = 36;
 const NUMBER_SIZE_COMPACT = 32;
+const CELL_HEIGHT_COMPACT = 38;
 const DOT_SIZE = 6;
+const MARK_SIZE = 11;
 
 const useStyles = createStyles((c) => ({
   header: {
@@ -330,15 +380,34 @@ const useStyles = createStyles((c) => ({
     paddingTop: space.xxs,
   },
   cellCompact: {
-    height: 38,
+    height: CELL_HEIGHT_COMPACT,
     justifyContent: 'center',
     paddingTop: 0,
+  },
+  // Behind the day numbers of a range, edge to edge so it runs on across a week row.
+  band: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: space.xxs,
+    height: NUMBER_SIZE,
+    backgroundColor: c.accentSoft,
+  },
+  bandCompact: {
+    top: (CELL_HEIGHT_COMPACT - NUMBER_SIZE_COMPACT) / 2,
+    height: NUMBER_SIZE_COMPACT,
+  },
+  bandStart: {
+    left: '50%',
+  },
+  bandEnd: {
+    right: '50%',
   },
   numberPressed: {
     backgroundColor: c.surface,
   },
   /** The trip band runs edge to edge through the cell, behind the day number. */
-  band: {
+  tripBand: {
     position: 'absolute',
     top: space.xxs,
     left: 0,
@@ -347,13 +416,13 @@ const useStyles = createStyles((c) => ({
     backgroundColor: c.sunset[2],
   },
   /** The first and last day end in a half circle around the day number. */
-  bandStart: {
+  tripBandStart: {
     left: '50%',
     marginLeft: -NUMBER_SIZE / 2,
     borderTopLeftRadius: NUMBER_SIZE / 2,
     borderBottomLeftRadius: NUMBER_SIZE / 2,
   },
-  bandEnd: {
+  tripBandEnd: {
     right: '50%',
     marginRight: -NUMBER_SIZE / 2,
     borderTopRightRadius: NUMBER_SIZE / 2,
@@ -376,11 +445,12 @@ const useStyles = createStyles((c) => ({
   numberEmphasis: {
     fontWeight: '800',
   },
-  dots: {
+  marks: {
     flexDirection: 'row',
-    gap: 3,
-    height: DOT_SIZE,
-    marginTop: 3,
+    alignItems: 'center',
+    gap: 2,
+    height: MARK_SIZE,
+    marginTop: 2,
   },
   dot: {
     width: DOT_SIZE,

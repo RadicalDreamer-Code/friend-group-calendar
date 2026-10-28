@@ -4,9 +4,19 @@ import { addMonths, monthOf } from '@/lib/dates';
 import { usePollWhileFocused, useToday } from '@/lib/freshness';
 
 import { calendarQueryKey, isCalendarGone } from './calendars';
-import { api, ApiError, unwrap, type Entry, type EntryColor, type EntryResponseStatus } from './client';
+import {
+  api,
+  ApiError,
+  unwrap,
+  type Entry,
+  type EntryColor,
+  type EntryCover,
+  type EntryResponseStatus,
+} from './client';
 
 export const entryTitleMaxLength = 80;
+/** The longest an entry can be, first and last day included, like the API allows. */
+export const entryMaxDays = 31;
 
 const entriesQueryKey = (calendarId: string) => [...calendarQueryKey(calendarId), 'entries'] as const;
 const monthQueryKey = (calendarId: string, month: string) => [...entriesQueryKey(calendarId), month] as const;
@@ -45,13 +55,6 @@ export function isTrip(entry: Entry): boolean {
 /** True when the entry is on `date`: its day, or one of a trip's days. */
 export function isOn(entry: Entry, date: string): boolean {
   return entry.date <= date && date <= entry.endDate;
-}
-
-/** Every YYYY-MM month an entry is in: one, or two or three for a trip. */
-function monthsOf(entry: Entry): string[] {
-  const months = [monthOf(entry.date)];
-  while (months[months.length - 1] < monthOf(entry.endDate)) months.push(addMonths(months[months.length - 1], 1));
-  return months;
 }
 
 /** True when the entry was deleted. */
@@ -138,6 +141,13 @@ function findCached(queryClient: QueryClient, calendarId: string, entryId: strin
 const byDay = (a: Entry, b: Entry) =>
   a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 
+/** The months an entry is in: every month from its first to its last day. */
+function monthsOf(entry: Entry): Set<string> {
+  const months = new Set<string>();
+  for (let m = monthOf(entry.date); m <= monthOf(entry.endDate); m = addMonths(m, 1)) months.add(m);
+  return months;
+}
+
 /**
  * Puts an entry everywhere it is shown: its own query and the months it is
  * in. It leaves any other month, which matters when its dates moved.
@@ -145,11 +155,12 @@ const byDay = (a: Entry, b: Entry) =>
 function putEntry(queryClient: QueryClient, calendarId: string, entry: Entry, { optimistic = false } = {}) {
   queryClient.setQueryData(entryQueryKey(calendarId, entry.id), entry);
   updateNext(queryClient, calendarId, entry.id, entry, !optimistic);
+  const months = monthsOf(entry);
   for (const [key, list] of queryClient.getQueriesData<Entry[]>({ queryKey: entriesQueryKey(calendarId) })) {
     if (!list) continue;
     const month = key[key.length - 1] as string;
     const others = list.filter((e) => e.id !== entry.id);
-    queryClient.setQueryData(key, monthsOf(entry).includes(month) ? [...others, entry].sort(byDay) : others);
+    queryClient.setQueryData(key, months.has(month) ? [...others, entry].sort(byDay) : others);
   }
 }
 
@@ -206,7 +217,7 @@ function refetchAfterError(queryClient: QueryClient, calendarId: string, error: 
   ]);
 }
 
-export type EntryFields = { title: string; date: string; color: EntryColor };
+export type EntryFields = { title: string; date: string; endDate: string; color: EntryColor; cover: EntryCover | null };
 
 export function useCreateEntry(calendarId: string) {
   const queryClient = useQueryClient();
