@@ -250,6 +250,51 @@ func TestMultiDayEntriesOverlapMonths(t *testing.T) {
 	}
 }
 
+func TestListEntriesRange(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	g := newGroup(t, f)
+	f.trip(t, g, "Cabin trip", "2026-10-30", "2026-11-02")
+	f.entry(t, g, g.ada, "Dinner", "2026-11-05")
+	f.entry(t, g, g.ada, "Later", "2026-11-06")
+
+	for _, tt := range []struct {
+		from, to string
+		want     []string
+	}{
+		{"2026-11-01", "2026-11-05", []string{"Cabin trip", "Dinner"}}, // the trip started before the range
+		{"2026-10-01", "2026-10-30", []string{"Cabin trip"}},           // and here it ends after it
+		{"2026-11-03", "2026-11-04", []string{}},
+		{"2026-11-06", "2026-11-06", []string{"Later"}},
+	} {
+		list, err := f.svc.ListEntriesRange(ctx, g.cal.ID, g.carla, tt.from, tt.to)
+		if err != nil || !slices.Equal(titles(list), tt.want) {
+			t.Fatalf("%s to %s = %v, %v; want %v", tt.from, tt.to, titles(list), err, tt.want)
+		}
+	}
+
+	if _, err := f.svc.ListEntriesRange(ctx, g.cal.ID, g.carla, "2026-01-01", "2026-04-02"); err != nil {
+		t.Fatalf("92 days: %v", err)
+	}
+	for _, tt := range []struct {
+		from, to string
+		want     error
+	}{
+		{"2026-01-01", "2026-04-03", ErrInvalidRange}, // 93 days
+		{"2026-11-02", "2026-11-01", ErrInvalidRange},
+		{"2026-11-31", "2026-12-01", ErrInvalidDate},
+		{"2026-11-01", "", ErrInvalidDate},
+	} {
+		if _, err := f.svc.ListEntriesRange(ctx, g.cal.ID, g.carla, tt.from, tt.to); !errors.Is(err, tt.want) {
+			t.Errorf("%s to %s: err = %v, want %v", tt.from, tt.to, err, tt.want)
+		}
+	}
+	stranger := f.user(t, "dora")
+	if _, err := f.svc.ListEntriesRange(ctx, g.cal.ID, stranger, "2026-11-01", "2026-11-05"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("someone outside the calendar: err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestNextEntryStillRunning(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

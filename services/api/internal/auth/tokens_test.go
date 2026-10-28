@@ -21,7 +21,7 @@ func TestAPITokenLifecycle(t *testing.T) {
 	if !strings.HasPrefix(res.Token, APITokenPrefix) || len(res.Token) != len(APITokenPrefix)+43 {
 		t.Fatalf("token %q: want fgc_ and 43 characters", res.Token)
 	}
-	if res.APIToken.Name != "Claude Code" || !res.APIToken.ExpiresAt.Equal(f.now.AddDate(0, 0, 30)) || res.APIToken.LastUsedAt != nil {
+	if res.APIToken.Name != "Claude Code" || !res.APIToken.ExpiresAt.Equal(f.now.Add(30*24*time.Hour)) || res.APIToken.LastUsedAt != nil {
 		t.Fatalf("unexpected token %+v", res.APIToken)
 	}
 

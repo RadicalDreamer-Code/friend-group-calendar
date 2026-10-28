@@ -100,7 +100,8 @@ func (s *Service) CreateAPIToken(ctx context.Context, userID uuid.UUID, rawName 
 		Name:      name,
 		TokenHash: hashToken(token),
 		CreatedAt: now,
-		ExpiresAt: now.AddDate(0, 0, days),
+		// Whole 24-hour days, whatever the server's time zone.
+		ExpiresAt: now.Add(time.Duration(days) * 24 * time.Hour),
 	})
 	if err != nil {
 		return CreateAPITokenResult{}, fmt.Errorf("create token: %w", err)

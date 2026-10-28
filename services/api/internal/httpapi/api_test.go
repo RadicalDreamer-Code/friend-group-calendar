@@ -15,9 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/auth"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/calendars"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/mcpserver"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/testutil"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
@@ -26,9 +29,13 @@ const webOrigin = "http://localhost:8082"
 
 type testAPI struct {
 	url   string
+	pool  *pgxpool.Pool
 	mail  *testutil.Mailbox
 	blobs *testutil.Blobs
 }
+
+// mcpToday is "today" for the MCP tools in tests.
+var mcpToday = time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)
 
 // newTestAPI runs the API with the default limits except the per-address
 // cooldown, so tests can sign the same user in on several devices. configure
@@ -38,16 +45,23 @@ func newTestAPI(t *testing.T, configure ...func(*http.Server)) *testAPI {
 	limits := auth.DefaultLimits
 	limits.EmailCooldown = auth.Limit{N: 1000, Window: time.Second}
 	pool := testutil.DB(t)
-	a := &testAPI{mail: &testutil.Mailbox{}, blobs: testutil.NewBlobs()}
+	a := &testAPI{pool: pool, mail: &testutil.Mailbox{}, blobs: testutil.NewBlobs()}
+	cals := calendars.NewService(pool)
 	h, err := NewRouter(Options{
 		DB:             pool,
 		AllowedOrigins: []string{webOrigin},
 		Auth:           auth.NewService(pool, a.mail, []byte(strings.Repeat("k", 32)), limits),
 		Users:          users.NewService(pool, a.blobs),
 		Friends:        friends.NewService(pool, friends.DefaultLimits),
-		Calendars:      calendars.NewService(pool),
+		Calendars:      cals,
 		Avatars:        a.blobs,
-		PublicURL:      "http://api.test",
+		MCP: mcpserver.New(mcpserver.Options{
+			Calendars: cals,
+			AppURL:    "http://app.test",
+			Limits:    mcpserver.DefaultLimits,
+			Today:     func() time.Time { return mcpToday },
+		}),
+		PublicURL: "http://api.test",
 		// Go's cookie jar only sends Secure cookies over https.
 		CookieSecure: false,
 	})

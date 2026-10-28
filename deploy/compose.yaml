@@ -29,6 +29,7 @@ services:
       API_ADDR: ":8080"
       API_PUBLIC_URL: https://api.${DOMAIN:?set DOMAIN in .env}
       API_ALLOWED_ORIGINS: https://app.${DOMAIN}
+      APP_PUBLIC_URL: https://app.${DOMAIN}
       # X-Forwarded-For is believed from Caddy's addresses only. Not the whole
       # network: Docker hands some connections to Caddy from the network's
       # gateway, and those must count as the client, not as a proxy.

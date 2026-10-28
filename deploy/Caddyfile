@@ -31,6 +31,8 @@ app.{$DOMAIN} {
 }
 
 api.{$DOMAIN} {
+	# /mcp answers with plain JSON, not an event stream, so compressing it
+	# like any other response is fine.
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

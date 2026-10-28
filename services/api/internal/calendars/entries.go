@@ -24,6 +24,8 @@ const (
 	MaxEntries = 5000
 	// MaxEntryDays is the longest an entry can last, both ends included.
 	MaxEntryDays = 31
+	// MaxRangeDays is the most days ListEntriesRange covers, both ends included.
+	MaxRangeDays = 92
 
 	dateLayout  = "2006-01-02"
 	monthLayout = "2006-01"
@@ -48,6 +50,7 @@ var (
 	// ErrInvalidEndDate: the end is before the start or too far after it.
 	ErrInvalidEndDate = fmt.Errorf("an entry ends on or after its first day and lasts at most %d days", MaxEntryDays)
 	ErrInvalidMonth   = errors.New("months are YYYY-MM, from 2000 to 2099")
+	ErrInvalidRange   = fmt.Errorf("a range ends on or after its first day and covers at most %d days", MaxRangeDays)
 	ErrInvalidColor   = errors.New("unknown entry color")
 	ErrInvalidCover   = errors.New("unknown entry cover")
 	ErrInvalidReply   = errors.New("the answer must be accepted or declined")
@@ -198,11 +201,34 @@ func (s *Service) ListEntries(ctx context.Context, calendarID, userID uuid.UUID,
 	if err != nil {
 		return nil, err
 	}
+	return s.listEntries(ctx, calendarID, userID, from, from.AddDate(0, 1, 0))
+}
+
+// ListEntriesRange returns the entries that overlap the days from `from` to
+// `to` (YYYY-MM-DD, both included), at most MaxRangeDays of them.
+func (s *Service) ListEntriesRange(ctx context.Context, calendarID, userID uuid.UUID, from, to string) ([]Entry, error) {
+	first, err := ParseDate(from)
+	if err != nil {
+		return nil, err
+	}
+	last, err := ParseDate(to)
+	if err != nil {
+		return nil, err
+	}
+	if last.Before(first) || last.After(first.AddDate(0, 0, MaxRangeDays-1)) {
+		return nil, ErrInvalidRange
+	}
+	return s.listEntries(ctx, calendarID, userID, first, last.AddDate(0, 0, 1))
+}
+
+// listEntries returns the entries that overlap the days from `from` up to,
+// not including, `until`.
+func (s *Service) listEntries(ctx context.Context, calendarID, userID uuid.UUID, from, until time.Time) ([]Entry, error) {
 	if _, _, err := s.view(ctx, calendarID, userID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListEntriesBetween(ctx, store.ListEntriesBetweenParams{
-		CalendarID: calendarID, FromDay: from, UntilDay: from.AddDate(0, 1, 0),
+		CalendarID: calendarID, FromDay: from, UntilDay: until,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list entries: %w", err)

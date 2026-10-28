@@ -21,6 +21,7 @@ import (
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/friends"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/httpapi"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/mail"
+	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/mcpserver"
 	"github.com/RadicalDreamer-Code/friend-group-calendar/services/api/internal/users"
 )
 
@@ -73,6 +74,7 @@ func run() error {
 	}
 	authService := auth.NewService(pool, sender, cfg.AuthSecret, auth.DefaultLimits)
 	go runCleanup(ctx, authService)
+	calendarService := calendars.NewService(pool)
 
 	handler, err := httpapi.NewRouter(httpapi.Options{
 		DB:             pool,
@@ -81,10 +83,15 @@ func run() error {
 		Auth:           authService,
 		Users:          users.NewService(pool, avatars),
 		Friends:        friends.NewService(pool, friends.DefaultLimits),
-		Calendars:      calendars.NewService(pool),
+		Calendars:      calendarService,
 		Avatars:        avatars,
-		PublicURL:      cfg.PublicURL,
-		CookieSecure:   cfg.CookieSecure,
+		MCP: mcpserver.New(mcpserver.Options{
+			Calendars: calendarService,
+			AppURL:    cfg.AppURL,
+			Limits:    mcpserver.DefaultLimits,
+		}),
+		PublicURL:    cfg.PublicURL,
+		CookieSecure: cfg.CookieSecure,
 	})
 	if err != nil {
 		return err
