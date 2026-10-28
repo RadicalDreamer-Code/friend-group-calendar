@@ -12,9 +12,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { Calendar, EntryCover } from '@/api/client';
-import { useNextEntry } from '@/api/entries';
-import { formatDay, formatShortDay, inDays } from '@/lib/dates';
-import { useRefreshOnFocus } from '@/lib/freshness';
+import { isTrip, useNextEntry } from '@/api/entries';
+import { dayOf, formatDay, formatRange, formatShortDay, inDays } from '@/lib/dates';
+import { useRefreshOnFocus, useToday } from '@/lib/freshness';
 import { createStyles } from '@/theme/ThemeProvider';
 import { entryColor, layout, radius, space } from '@/theme/tokens';
 
@@ -27,26 +27,32 @@ import { Text } from './Text';
 
 /**
  * Above a calendar's month: the next entry from today on, with its cover,
- * a countdown chip and how many are going. Opens the entry. Hidden while
- * nothing is coming up, and while it loads or cannot be loaded; the month
- * below shows the same entries either way.
+ * a countdown chip and how many are going; a trip that is still running
+ * shows which of its days today is. Opens the entry. Hidden while nothing
+ * is coming up, and while it loads or cannot be loaded; the month below
+ * shows the same entries either way.
  */
 export function NextUpCard({ calendar }: { calendar: Calendar }) {
   const styles = useStyles();
   const { width } = useWindowDimensions();
   const next = useNextEntry(calendar.id);
+  const now = useToday();
   useRefreshOnFocus(next);
   const entry = next.data;
   if (!entry) return null;
 
   const going = entry.accepted.length;
   const members = calendar.members.length;
-  const when = inDays(entry.date);
+  const running = entry.date < now;
+  const when = running ? dayOf(entry.date, entry.endDate, now) : inDays(entry.date, now);
+  const label = running ? `Now · ${when}` : `Next up · ${when}`;
+  const dates = isTrip(entry) ? formatRange(entry.date, entry.endDate, now) : formatShortDay(entry.date, now);
+  const spokenDates = isTrip(entry) ? dates : formatDay(entry.date, now);
 
   return (
     <Springy
       role="link"
-      aria-label={`Next up ${when}: ${entry.title}, ${formatDay(entry.date)}. ${going} of ${members} going.`}
+      aria-label={`${label}: ${entry.title}, ${spokenDates}. ${going} of ${members} going.`}
       onPress={() =>
         router.push({ pathname: '/calendars/[id]/entries/[entryId]', params: { id: calendar.id, entryId: entry.id } })
       }
@@ -66,14 +72,14 @@ export function NextUpCard({ calendar }: { calendar: Calendar }) {
         <View style={styles.text}>
           <View style={styles.chip}>
             <Text variant="caption" tone="onSunset" style={styles.chipText}>
-              Next up · {when}
+              {label}
             </Text>
           </View>
           <Text variant="cardTitle" style={styles.title} numberOfLines={1}>
             {entry.title}
           </Text>
           <Text variant="footnote" style={styles.meta} numberOfLines={1}>
-            {formatShortDay(entry.date)} · {going} of {members} going
+            {dates} · {going} of {members} going
           </Text>
         </View>
         <BobbingIcon cover={entry.cover} />

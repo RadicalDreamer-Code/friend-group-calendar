@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { canEditEntries, useCalendar } from '@/api/calendars';
 import { errorMessage, type Calendar, type CalendarMember, type Entry, type EntryCover } from '@/api/client';
-import { isEntryGone, replyOf, useEntry, useRespond, type Reply } from '@/api/entries';
+import { isEntryGone, isTrip, replyOf, useEntry, useRespond, type Reply } from '@/api/entries';
 import { useUser } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -27,7 +27,7 @@ import { IconButton } from '@/components/IconButton';
 import { Page } from '@/components/Page';
 import { SkeletonList } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
-import { countdown, formatDay, formatShortDay } from '@/lib/dates';
+import { countdown, formatDay, formatRange, formatShortDay, spanDays, tripCountdown } from '@/lib/dates';
 import { haptics } from '@/lib/haptics';
 import { useRefreshOnFocus } from '@/lib/freshness';
 import { backTo } from '@/lib/navigation';
@@ -139,6 +139,12 @@ function Details({
 
   const edit = () => router.push({ pathname: '/edit-entry', params: { calendarId: calendar.id, entryId: entry.id } });
 
+  // A trip counts down to its first day, then shows which day it is, then "Ended".
+  const trip = isTrip(entry);
+  const range = trip ? formatRange(entry.date, entry.endDate) : null;
+  const status = trip ? tripCountdown(entry.date, entry.endDate) : countdown(entry.date);
+  const when = range ? `${range} · ${spanDays(entry.date, entry.endDate)} days` : formatDay(entry.date);
+
   return (
     <View style={styles.root}>
       <ScrollView
@@ -157,7 +163,7 @@ function Details({
             <View style={styles.coverText}>
               <View style={styles.chip}>
                 <Text variant="caption" tone="onSunset" style={styles.chipText}>
-                  {formatShortDay(entry.date)}
+                  {range ?? formatShortDay(entry.date)}
                 </Text>
               </View>
               <Text variant="largeTitle" role="heading" aria-level={1} style={styles.title} numberOfLines={3}>
@@ -172,9 +178,9 @@ function Details({
             <View style={styles.countdown}>
               <CountdownTile color={entryColor(entry.color)} cover={entry.cover} jig={mine === 'accepted'} />
               <View style={styles.countdownText}>
-                <Text variant="title">{countdown(entry.date)}</Text>
+                <Text variant="title">{status}</Text>
                 <Text variant="footnote" tone="secondary">
-                  {formatDay(entry.date)}
+                  {when}
                   {entry.createdBy
                     ? ` · Added by ${entry.createdBy.id === me.id ? 'you' : `@${entry.createdBy.username}`}`
                     : ''}

@@ -144,3 +144,44 @@ export function relativeDay(date: string, now = today()): string {
   const near = nearDay(daysFrom(date, now));
   return near ? capitalize(near) : formatDay(date, now);
 }
+
+/** How many days a stretch from `start` to `end` covers, both included: 4 for Oct 26 to Oct 29. */
+export function spanDays(start: string, end: string): number {
+  return daysFrom(end, start) + 1;
+}
+
+/** "Day 2 of 4": which day of a stretch `date` is. */
+export function dayOf(start: string, end: string, date: string): string {
+  return `Day ${daysFrom(date, start) + 1} of ${spanDays(start, end)}`;
+}
+
+/**
+ * A trip's countdown: "3 days to go" and "Tomorrow" up to its first day,
+ * then "Day 2 of 4", then "Ended".
+ */
+export function tripCountdown(start: string, end: string, now = today()): string {
+  if (now < start) return countdown(start, now);
+  if (now <= end) return dayOf(start, end, now);
+  return 'Ended';
+}
+
+/**
+ * "Mon 26 → Thu 29 Oct", "Fri 30 Oct → Mon 2 Nov", with the year on each end
+ * when the two are in different years or not this year.
+ */
+export function formatRange(start: string, end: string, now = today()): string {
+  const withYear = start.slice(0, 4) !== end.slice(0, 4) || start.slice(0, 4) !== now.slice(0, 4);
+  const sameMonth = monthOf(start) === monthOf(end);
+  const part = (date: string, showMonth: boolean) => {
+    const d = fromISODate(date);
+    return [
+      d.toLocaleDateString(undefined, { weekday: 'short' }),
+      d.getDate(),
+      showMonth ? d.toLocaleDateString(undefined, { month: 'short' }) : null,
+      withYear && showMonth ? d.getFullYear() : null,
+    ]
+      .filter((p) => p !== null)
+      .join(' ');
+  };
+  return `${part(start, !sameMonth || withYear)} → ${part(end, true)}`;
+}

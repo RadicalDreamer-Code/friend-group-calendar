@@ -30,6 +30,12 @@ import { CoverIcon } from './CoverIcon';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
+/**
+ * A trip on one day of the grid. `start` and `end` round the band off: on the
+ * trip's first and last day, not where it breaks at the end of a week row.
+ */
+export type TripBand = { start: boolean; end: boolean };
+
 /** Most marks one day shows; more entries still show as three. */
 const MAX_MARKS = 3;
 /** How far a swipe has to travel to change the month. */
@@ -49,13 +55,16 @@ type MonthCalendarProps = {
   onSelect: (date: string) => void;
   /** Entries per day, marked under the day number. */
   marks?: Record<string, DayMark[]>;
+  /** Trip days, drawn as one mustard band behind the day numbers. */
+  bands?: Record<string, TripBand>;
   /** Smaller cells, for picking a date in a form. */
   compact?: boolean;
 };
 
 /**
  * A month grid: arrows or a sideways swipe change the month, today is in
- * coral and the selected day is an ink circle that springs in.
+ * coral, trips are a mustard band and the selected day is an ink circle that
+ * springs in.
  */
 export function MonthCalendar({
   month,
@@ -64,6 +73,7 @@ export function MonthCalendar({
   rangeEnd,
   onSelect,
   marks,
+  bands,
   compact,
 }: MonthCalendarProps) {
   const styles = useStyles();
@@ -148,6 +158,7 @@ export function MonthCalendar({
             rangeEnd={rangeEnd ?? null}
             onSelect={onSelect}
             marks={marks}
+            bands={bands}
             compact={compact ?? false}
           />
         </Animated.View>
@@ -176,10 +187,11 @@ type DaysProps = {
   rangeEnd: string | null;
   onSelect: (date: string) => void;
   marks?: Record<string, DayMark[]>;
+  bands?: Record<string, TripBand>;
   compact: boolean;
 };
 
-function Days({ month, today, selected, rangeEnd, onSelect, marks, compact }: DaysProps) {
+function Days({ month, today, selected, rangeEnd, onSelect, marks, bands, compact }: DaysProps) {
   const styles = useStyles();
   const ranged = selected !== null && rangeEnd !== null && rangeEnd > selected;
   const rangeOf = (date: string): DayRange | undefined => {
@@ -203,6 +215,7 @@ function Days({ month, today, selected, rangeEnd, onSelect, marks, compact }: Da
                 isSelected={date === selected || (ranged && date === rangeEnd)}
                 range={rangeOf(date)}
                 marks={marks?.[date]}
+                band={compact ? undefined : bands?.[date]}
                 compact={compact}
                 onSelect={onSelect}
               />
@@ -225,14 +238,15 @@ type DayProps = {
   isSelected: boolean;
   range?: DayRange;
   marks?: DayMark[];
+  band?: TripBand;
   compact: boolean;
   onSelect: (date: string) => void;
 };
 
-const Day = memo(function Day({ date, isToday, isSelected, range, marks, compact, onSelect }: DayProps) {
+const Day = memo(function Day({ date, isToday, isSelected, range, marks, band, compact, onSelect }: DayProps) {
   const styles = useStyles();
   const { colors } = useTheme();
-  const count = marks?.length ?? 0;
+  const count = (marks?.length ?? 0) + (band ? 1 : 0);
 
   // The ink circle pops in on the newly selected day, not on a day that is
   // selected when the month appears.
@@ -279,6 +293,12 @@ const Day = memo(function Day({ date, isToday, isSelected, range, marks, compact
               ]}
             />
           ) : null}
+          {band ? (
+            <View
+              style={[styles.tripBand, band.start && styles.tripBandStart, band.end && styles.tripBandEnd]}
+              aria-hidden
+            />
+          ) : null}
           <Animated.View
             style={[
               styles.number,
@@ -291,7 +311,16 @@ const Day = memo(function Day({ date, isToday, isSelected, range, marks, compact
               variant={compact ? 'subhead' : 'callout'}
               style={[
                 (isToday || isSelected) && styles.numberEmphasis,
-                { color: isSelected ? colors.background : isToday ? colors.accent : colors.text },
+                {
+                  // On the mustard band today stays bold, in ink: coral does not read on it.
+                  color: isSelected
+                    ? colors.background
+                    : band
+                      ? colors.onSunset
+                      : isToday
+                        ? colors.accent
+                        : colors.text,
+                },
               ]}
             >
               {Number(date.slice(8))}
@@ -376,6 +405,28 @@ const useStyles = createStyles((c) => ({
   },
   numberPressed: {
     backgroundColor: c.surface,
+  },
+  /** The trip band runs edge to edge through the cell, behind the day number. */
+  tripBand: {
+    position: 'absolute',
+    top: space.xxs,
+    left: 0,
+    right: 0,
+    height: NUMBER_SIZE,
+    backgroundColor: c.sunset[2],
+  },
+  /** The first and last day end in a half circle around the day number. */
+  tripBandStart: {
+    left: '50%',
+    marginLeft: -NUMBER_SIZE / 2,
+    borderTopLeftRadius: NUMBER_SIZE / 2,
+    borderBottomLeftRadius: NUMBER_SIZE / 2,
+  },
+  tripBandEnd: {
+    right: '50%',
+    marginRight: -NUMBER_SIZE / 2,
+    borderTopRightRadius: NUMBER_SIZE / 2,
+    borderBottomRightRadius: NUMBER_SIZE / 2,
   },
   numberSelected: {
     backgroundColor: c.text,
