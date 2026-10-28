@@ -103,22 +103,23 @@ export function daysFrom(date: string, now = today()): number {
   return Math.round((fromISODate(date).getTime() - fromISODate(now).getTime()) / 86_400_000);
 }
 
+/** "today", "tomorrow" or "yesterday", or null for any other day. */
+function nearDay(days: number): string | null {
+  return days === 0 ? 'today' : days === 1 ? 'tomorrow' : days === -1 ? 'yesterday' : null;
+}
+
+export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** "today", "tomorrow", "in 2 days", "yesterday", "3 days ago": for chips and second lines. */
 export function inDays(date: string, now = today()): string {
   const days = daysFrom(date, now);
-  if (days === 0) return 'today';
-  if (days === 1) return 'tomorrow';
-  if (days === -1) return 'yesterday';
-  return days > 0 ? `in ${days} days` : `${-days} days ago`;
+  return nearDay(days) ?? (days > 0 ? `in ${days} days` : `${-days} days ago`);
 }
 
 /** "Today", "Tomorrow", "2 days to go", "Yesterday", "3 days ago": an entry's countdown. */
 export function countdown(date: string, now = today()): string {
   const days = daysFrom(date, now);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  if (days === -1) return 'Yesterday';
-  return days > 0 ? `${days} days to go` : `${-days} days ago`;
+  return capitalize(nearDay(days) ?? (days > 0 ? `${days} days to go` : `${-days} days ago`));
 }
 
 /** "Sat, Oct 31", with the year when it is not this year. */
@@ -134,9 +135,6 @@ export function formatShortDay(date: string, now = today()): string {
 
 /** "Today", "Tomorrow", "Yesterday" or formatDay. */
 export function relativeDay(date: string, now = today()): string {
-  const days = daysFrom(date, now);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  if (days === -1) return 'Yesterday';
-  return formatDay(date, now);
+  const near = nearDay(daysFrom(date, now));
+  return near ? capitalize(near) : formatDay(date, now);
 }

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -121,6 +121,14 @@ function Details({
   const declined = people(entry.declined);
   const answered = new Set([...entry.accepted, ...entry.declined]);
   const waiting = calendar.members.filter((m) => !answered.has(m.user.id));
+  // Your face moves to another spot when you say you're in, maybe as a new
+  // view; this tells it to bounce in rather than just appear.
+  const [answerShown, setAnswerShown] = useState(mine);
+  const [joined, setJoined] = useState(false);
+  if (mine !== answerShown) {
+    setAnswerShown(mine);
+    setJoined(mine === 'accepted');
+  }
 
   // Tapping your current answer again takes it back.
   const answer = (reply: Exclude<Reply, null>) => {
@@ -204,12 +212,20 @@ function Details({
 
             <Faces
               title={`Who’s coming · ${going.length} of ${calendar.members.length}`}
-              going={going}
-              waiting={waiting}
+              groups={[
+                { members: going, status: 'going' },
+                { members: waiting, status: 'waiting' },
+              ]}
               me={me.id}
+              joined={joined}
             />
             {declined.length > 0 ? (
-              <Faces title={`Can’t make it · ${declined.length}`} going={[]} waiting={declined} me={me.id} />
+              <Faces
+                title={`Can’t make it · ${declined.length}`}
+                groups={[{ members: declined, status: 'declined' }]}
+                me={me.id}
+                joined={false}
+              />
             ) : null}
           </View>
         </View>
@@ -281,17 +297,26 @@ function CountdownTile({ color, jig }: { color: string; jig: boolean }) {
   );
 }
 
+type FaceStatus = 'going' | 'waiting' | 'declined';
+
+const statusLabel: Record<FaceStatus, string> = {
+  going: 'going',
+  waiting: 'no answer yet',
+  declined: 'can’t make it',
+};
+
 /** A row of faces: people going in full color, the rest faded. */
 function Faces({
   title,
-  going,
-  waiting,
+  groups,
   me,
+  joined,
 }: {
   title: string;
-  going: CalendarMember[];
-  waiting: CalendarMember[];
+  groups: { members: CalendarMember[]; status: FaceStatus }[];
   me: string;
+  /** You just said you're in: your face bounces in. */
+  joined: boolean;
 }) {
   const styles = useStyles();
   return (
@@ -300,30 +325,42 @@ function Faces({
         {title}
       </Text>
       <View style={styles.faceRow} role="list">
-        {going.map((m) => (
-          <Face key={m.user.id} member={m} isMe={m.user.id === me} going />
-        ))}
-        {waiting.map((m) => (
-          <Face key={m.user.id} member={m} isMe={m.user.id === me} going={false} />
-        ))}
+        {groups.flatMap(({ members, status }) =>
+          members.map((m) => (
+            <Face
+              key={m.user.id}
+              member={m}
+              isMe={m.user.id === me}
+              status={status}
+              bounce={joined && m.user.id === me}
+            />
+          )),
+        )}
       </View>
     </View>
   );
 }
 
-function Face({ member, isMe, going }: { member: CalendarMember; isMe: boolean; going: boolean }) {
+function Face({
+  member,
+  isMe,
+  status,
+  bounce,
+}: {
+  member: CalendarMember;
+  isMe: boolean;
+  status: FaceStatus;
+  bounce: boolean;
+}) {
   const styles = useStyles();
   const reduceMotion = useReducedMotion();
-  const pop = useSharedValue(1);
-  const wasGoing = useRef(going);
+  const going = status === 'going';
+  const pop = useSharedValue(bounce && !reduceMotion ? 0 : 1);
   useEffect(() => {
-    // Your face bounces in when you say you're in.
-    if (isMe && going && !wasGoing.current && !reduceMotion) {
-      pop.set(0);
-      pop.set(withSpring(1, { damping: 9, stiffness: 260, mass: 0.7 }));
-    }
-    wasGoing.current = going;
-  }, [going, isMe, reduceMotion, pop]);
+    if (!bounce || reduceMotion) return;
+    pop.set(0);
+    pop.set(withSpring(1, { damping: 9, stiffness: 260, mass: 0.7 }));
+  }, [bounce, reduceMotion, pop]);
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, 0.2 + pop.value),
     transform: [{ translateY: (1 - pop.value) * 14 }, { scale: 0.6 + 0.4 * pop.value }],
@@ -334,7 +371,7 @@ function Face({ member, isMe, going }: { member: CalendarMember; isMe: boolean; 
     <Animated.View
       style={[styles.face, style]}
       role="listitem"
-      aria-label={`@${member.user.username}${isMe ? ' (you)' : ''}`}
+      aria-label={`@${member.user.username}${isMe ? ' (you)' : ''}, ${statusLabel[status]}`}
     >
       <View style={[styles.faceRing, !going && styles.faceRingWaiting]}>
         <View style={!going && styles.faded}>

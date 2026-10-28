@@ -54,9 +54,11 @@ export function NextUpCard({ calendar }: { calendar: Calendar }) {
     >
       <Cover
         color={entryColor(entry.color)}
-        // Taller on wide screens, so the horizon still shows in a long card.
+        // Taller on wide screens, so more of the sunset shows in a long card.
         style={[styles.cover, width >= layout.wideBreakpoint && styles.coverWide]}
         sunAt={0.62}
+        // A wide card crops the scene to a strip; keep the bottom, where the white text is.
+        anchor="bottom"
       >
         <RainbowArc size={ARC} style={styles.arc} />
         <View style={styles.text}>

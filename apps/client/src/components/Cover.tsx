@@ -10,6 +10,13 @@ type CoverProps = {
   style?: StyleProp<ViewStyle>;
   /** Where the sun sets, from 0 (left) to 1 (right); keeps it out from behind a title. */
   sunAt?: number;
+  /**
+   * Which part of the scene a box with another shape keeps. 'bottom' keeps
+   * the horizon, water and dark fade in a wide, short box, for text at the
+   * bottom, and leaves out the last of the water so more of the sun shows;
+   * 'middle' crops evenly.
+   */
+  anchor?: 'middle' | 'bottom';
   /** Shown on top, e.g. the title; position it inside the cover yourself. */
   children?: ReactNode;
 };
@@ -18,6 +25,8 @@ const grain = require('../../assets/grain.png');
 
 // The scene is drawn on a 400 × 240 canvas and scaled to cover any box.
 const HORIZON = 170;
+/** How much of the canvas an anchor='bottom' cover shows: down to just below the last glint. */
+const BOTTOM_VIEW = 218;
 const SUN_R = 70;
 /** Gaps through the lower sun, thicker towards the horizon: the 70s striped sun. */
 const SUN_GAPS = [
@@ -39,7 +48,7 @@ const GLINTS = [
  * bottom so white text on it stays readable. Stands in for an entry's
  * cover until entries can pick one.
  */
-export function Cover({ color, style, sunAt = 0.5, children }: CoverProps) {
+export function Cover({ color, style, sunAt = 0.5, anchor = 'middle', children }: CoverProps) {
   // Gradient ids are global on web; two covers on one page must not share them.
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const sky = [mix(color, '#4A2433', 0.45), color, mix(color, '#FFD9A0', 0.6)];
@@ -49,7 +58,13 @@ export function Cover({ color, style, sunAt = 0.5, children }: CoverProps) {
 
   return (
     <View style={[styles.root, style]}>
-      <Svg width="100%" height="100%" viewBox="0 0 400 240" preserveAspectRatio="xMidYMid slice" style={styles.fill}>
+      <Svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 400 ${anchor === 'bottom' ? BOTTOM_VIEW : 240}`}
+        preserveAspectRatio={anchor === 'bottom' ? 'xMidYMax slice' : 'xMidYMid slice'}
+        style={styles.fill}
+      >
         <Defs>
           <LinearGradient id={`sky${id}`} x1="0" y1="0" x2="0" y2={HORIZON} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={sky[0]} />

@@ -1,7 +1,9 @@
 import { focusManager } from '@tanstack/react-query';
 import { useFocusEffect, useIsFocused } from 'expo-router';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
+
+import { today } from './dates';
 
 /**
  * Keeps shared data fresh without live updates: queries refetch when the app
@@ -48,4 +50,28 @@ export function useRefreshOnFocus(...queries: Refreshable[]) {
       for (const q of latest.current) if (q.isStale) q.refetch();
     }, []),
   );
+}
+
+/**
+ * The device's today as YYYY-MM-DD, re-rendering when the day changes: at
+ * midnight, and when the app comes back after a night in the background
+ * (timers do not run there).
+ */
+export function useToday(): string {
+  const [day, setDay] = useState(today);
+  useEffect(() => {
+    const check = () => setDay(today());
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    // A second late, so today() is surely the new day.
+    const timer = setTimeout(check, midnight.getTime() - now.getTime() + 1000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => {
+      clearTimeout(timer);
+      subscription.remove();
+    };
+  }, [day]);
+  return day;
 }
