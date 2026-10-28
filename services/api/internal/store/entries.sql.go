@@ -24,9 +24,9 @@ func (q *Queries) CountEntries(ctx context.Context, calendarID uuid.UUID) (int32
 }
 
 const createEntry = `-- name: CreateEntry :one
-INSERT INTO entries (calendar_id, title, day, end_day, color, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day
+INSERT INTO entries (calendar_id, title, day, end_day, color, cover, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day, cover
 `
 
 type CreateEntryParams struct {
@@ -35,6 +35,7 @@ type CreateEntryParams struct {
 	Day        time.Time  `json:"day"`
 	EndDay     time.Time  `json:"end_day"`
 	Color      string     `json:"color"`
+	Cover      *string    `json:"cover"`
 	CreatedBy  *uuid.UUID `json:"created_by"`
 }
 
@@ -45,6 +46,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		arg.Day,
 		arg.EndDay,
 		arg.Color,
+		arg.Cover,
 		arg.CreatedBy,
 	)
 	var i Entry
@@ -58,6 +60,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EndDay,
+		&i.Cover,
 	)
 	return i, err
 }
@@ -121,7 +124,7 @@ func (q *Queries) DeleteMemberEntryResponses(ctx context.Context, arg DeleteMemb
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day FROM entries WHERE id = $1 AND calendar_id = $2
+SELECT id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day, cover FROM entries WHERE id = $1 AND calendar_id = $2
 `
 
 type GetEntryParams struct {
@@ -142,12 +145,13 @@ func (q *Queries) GetEntry(ctx context.Context, arg GetEntryParams) (Entry, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EndDay,
+		&i.Cover,
 	)
 	return i, err
 }
 
 const getEntryWithCreator = `-- name: GetEntryWithCreator :one
-SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.cover, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
@@ -166,6 +170,7 @@ type GetEntryWithCreatorRow struct {
 	Day              time.Time  `json:"day"`
 	EndDay           time.Time  `json:"end_day"`
 	Color            string     `json:"color"`
+	Cover            *string    `json:"cover"`
 	CreatedBy        *uuid.UUID `json:"created_by"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -183,6 +188,7 @@ func (q *Queries) GetEntryWithCreator(ctx context.Context, arg GetEntryWithCreat
 		&i.Day,
 		&i.EndDay,
 		&i.Color,
+		&i.Cover,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -193,7 +199,7 @@ func (q *Queries) GetEntryWithCreator(ctx context.Context, arg GetEntryWithCreat
 }
 
 const listEntriesBetween = `-- name: ListEntriesBetween :many
-SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.cover, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
@@ -214,6 +220,7 @@ type ListEntriesBetweenRow struct {
 	Day              time.Time  `json:"day"`
 	EndDay           time.Time  `json:"end_day"`
 	Color            string     `json:"color"`
+	Cover            *string    `json:"cover"`
 	CreatedBy        *uuid.UUID `json:"created_by"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -239,6 +246,7 @@ func (q *Queries) ListEntriesBetween(ctx context.Context, arg ListEntriesBetween
 			&i.Day,
 			&i.EndDay,
 			&i.Color,
+			&i.Cover,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -323,7 +331,7 @@ func (q *Queries) MostEntriesOnADay(ctx context.Context, arg MostEntriesOnADayPa
 }
 
 const nextEntry = `-- name: NextEntry :one
-SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.created_by, e.created_at, e.updated_at,
+SELECT e.id, e.calendar_id, e.title, e.day, e.end_day, e.color, e.cover, e.created_by, e.created_at, e.updated_at,
        COALESCE(u.username::text, '')::text AS creator_username, u.avatar_key AS creator_avatar_key
 FROM entries e
 LEFT JOIN users u ON u.id = e.created_by
@@ -344,6 +352,7 @@ type NextEntryRow struct {
 	Day              time.Time  `json:"day"`
 	EndDay           time.Time  `json:"end_day"`
 	Color            string     `json:"color"`
+	Cover            *string    `json:"cover"`
 	CreatedBy        *uuid.UUID `json:"created_by"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -363,6 +372,7 @@ func (q *Queries) NextEntry(ctx context.Context, arg NextEntryParams) (NextEntry
 		&i.Day,
 		&i.EndDay,
 		&i.Color,
+		&i.Cover,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -393,9 +403,9 @@ func (q *Queries) SetEntryResponse(ctx context.Context, arg SetEntryResponsePara
 
 const updateEntry = `-- name: UpdateEntry :one
 UPDATE entries
-SET title = $1, day = $2, end_day = $3, color = $4, updated_at = now()
-WHERE id = $5 AND calendar_id = $6
-RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day
+SET title = $1, day = $2, end_day = $3, color = $4, cover = $5, updated_at = now()
+WHERE id = $6 AND calendar_id = $7
+RETURNING id, calendar_id, title, day, color, created_by, created_at, updated_at, end_day, cover
 `
 
 type UpdateEntryParams struct {
@@ -403,6 +413,7 @@ type UpdateEntryParams struct {
 	Day        time.Time `json:"day"`
 	EndDay     time.Time `json:"end_day"`
 	Color      string    `json:"color"`
+	Cover      *string   `json:"cover"`
 	ID         uuid.UUID `json:"id"`
 	CalendarID uuid.UUID `json:"calendar_id"`
 }
@@ -413,6 +424,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (Entry
 		arg.Day,
 		arg.EndDay,
 		arg.Color,
+		arg.Cover,
 		arg.ID,
 		arg.CalendarID,
 	)
@@ -427,6 +439,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (Entry
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EndDay,
+		&i.Cover,
 	)
 	return i, err
 }

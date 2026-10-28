@@ -768,8 +768,9 @@ paths:
       summary: Add an entry (owner and editors)
       description: |
         Error codes: `invalid_title`, `invalid_date`, `invalid_end_date` (before the
-        start date, or more than 31 days long), `invalid_color`, `forbidden`,
-        `day_full` (20 entries on one of its days), `too_many_entries` (5000 in the calendar).
+        start date, or more than 31 days long), `invalid_color`, `invalid_cover`,
+        `forbidden`, `day_full` (20 entries on one of its days), `too_many_entries`
+        (5000 in the calendar).
       requestBody:
         required: true
         content:
@@ -786,6 +787,11 @@ paths:
                   $ref: "#/components/schemas/EntryEndDate"
                 color:
                   $ref: "#/components/schemas/EntryColor"
+                cover:
+                  description: Null or left out for no cover.
+                  oneOf:
+                    - $ref: "#/components/schemas/EntryCover"
+                    - type: "null"
       responses:
         "201":
           description: The new entry
@@ -889,6 +895,11 @@ paths:
                   $ref: "#/components/schemas/EntryEndDate"
                 color:
                   $ref: "#/components/schemas/EntryColor"
+                cover:
+                  description: Null removes the cover; left out, it stays.
+                  oneOf:
+                    - $ref: "#/components/schemas/EntryCover"
+                    - type: "null"
       responses:
         "200":
           description: The updated entry
@@ -1273,13 +1284,19 @@ components:
       type: string
       enum: [fjord, sage, clay, rose, plum, sand, moss, slate]
 
+    EntryCover:
+      description: |
+        One of the cover scenes. The client draws them; there are no uploads.
+      type: string
+      enum: [lake, mountains, beach, city, night_out, dinner, game_night]
+
     EntryResponseStatus:
       type: string
       enum: [accepted, declined]
 
     Entry:
       type: object
-      required: [id, title, date, endDate, color, createdBy, createdAt, updatedAt, accepted, declined]
+      required: [id, title, date, endDate, color, cover, createdBy, createdAt, updatedAt, accepted, declined]
       properties:
         id:
           type: string
@@ -1292,6 +1309,11 @@ components:
           $ref: "#/components/schemas/EntryEndDate"
         color:
           $ref: "#/components/schemas/EntryColor"
+        cover:
+          description: The cover scene; null for none.
+          oneOf:
+            - $ref: "#/components/schemas/EntryCover"
+            - type: "null"
         createdBy:
           description: Who added it; null once their account is deleted.
           oneOf:

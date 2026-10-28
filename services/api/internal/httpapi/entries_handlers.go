@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -18,6 +19,7 @@ type entryResponse struct {
 	Date      string          `json:"date"`
 	EndDate   string          `json:"endDate"`
 	Color     string          `json:"color"`
+	Cover     *string         `json:"cover"` // null for none
 	CreatedBy *personResponse `json:"createdBy"`
 	CreatedAt time.Time       `json:"createdAt"`
 	UpdatedAt time.Time       `json:"updatedAt"`
@@ -41,6 +43,9 @@ func (s *Server) entryResponse(e calendars.Entry) entryResponse {
 		UpdatedAt: e.UpdatedAt,
 		Accepted:  e.Accepted,
 		Declined:  e.Declined,
+	}
+	if e.Cover != "" {
+		resp.Cover = &e.Cover
 	}
 	if e.CreatedBy != nil {
 		p := s.calendarPerson(*e.CreatedBy)
@@ -95,6 +100,8 @@ type createEntryRequest struct {
 	Date    string `json:"date"`
 	EndDate string `json:"endDate"`
 	Color   string `json:"color"`
+	// Cover is left out or null for none.
+	Cover *string `json:"cover"`
 }
 
 func (s *Server) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
@@ -107,8 +114,12 @@ func (s *Server) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	cover, ok := coverParam(w, r, req.Cover)
+	if !ok {
+		return
+	}
 	e, err := s.calendars.CreateEntry(r.Context(), id, p.User.ID, calendars.EntryInput{
-		Title: req.Title, Date: req.Date, EndDate: req.EndDate, Color: req.Color,
+		Title: req.Title, Date: req.Date, EndDate: req.EndDate, Color: req.Color, Cover: cover,
 	})
 	if writeEntryError(w, r, err) {
 		writeJSON(w, http.StatusCreated, s.entryResponse(e))
@@ -132,6 +143,19 @@ type updateEntryRequest struct {
 	Date    *string `json:"date"`
 	EndDate *string `json:"endDate"`
 	Color   *string `json:"color"`
+	// Cover null removes the cover; left out, it stays.
+	Cover nullable[string] `json:"cover"`
+}
+
+// nullable is a JSON field that can be left out, null or a value.
+type nullable[T any] struct {
+	Set   bool // the field was in the body
+	Value *T   // nil for null
+}
+
+func (n *nullable[T]) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	return json.Unmarshal(data, &n.Value)
 }
 
 func (s *Server) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
@@ -144,9 +168,15 @@ func (s *Server) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	e, err := s.calendars.UpdateEntry(r.Context(), id, p.User.ID, entryID, calendars.EntryChanges{
-		Title: req.Title, Date: req.Date, EndDate: req.EndDate, Color: req.Color,
-	})
+	changes := calendars.EntryChanges{Title: req.Title, Date: req.Date, EndDate: req.EndDate, Color: req.Color}
+	if req.Cover.Set {
+		cover, ok := coverParam(w, r, req.Cover.Value)
+		if !ok {
+			return
+		}
+		changes.Cover = &cover
+	}
+	e, err := s.calendars.UpdateEntry(r.Context(), id, p.User.ID, entryID, changes)
 	if writeEntryError(w, r, err) {
 		writeJSON(w, http.StatusOK, s.entryResponse(e))
 	}
@@ -215,6 +245,19 @@ func entryParams(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, 
 	return id, entryID, true
 }
 
+// coverParam reads a cover from a request body, where null is no cover. An
+// empty string is not a cover the API knows, so it does not mean none.
+func coverParam(w http.ResponseWriter, r *http.Request, cover *string) (string, bool) {
+	if cover == nil {
+		return "", true
+	}
+	if *cover == "" {
+		writeEntryError(w, r, calendars.ErrInvalidCover)
+		return "", false
+	}
+	return *cover, true
+}
+
 // writeEntryError is writeCalendarError plus the errors only entries have.
 func writeEntryError(w http.ResponseWriter, r *http.Request, err error) bool {
 	switch {
@@ -230,6 +273,8 @@ func writeEntryError(w http.ResponseWriter, r *http.Request, err error) bool {
 		writeError(w, http.StatusBadRequest, "invalid_month", "The month must look like 2026-10, between 2000 and 2099.")
 	case errors.Is(err, calendars.ErrInvalidColor):
 		writeError(w, http.StatusBadRequest, "invalid_color", "Pick one of the entry colors.")
+	case errors.Is(err, calendars.ErrInvalidCover):
+		writeError(w, http.StatusBadRequest, "invalid_cover", "Pick one of the entry covers.")
 	case errors.Is(err, calendars.ErrInvalidReply):
 		writeError(w, http.StatusBadRequest, "invalid_status", "The answer must be accepted or declined.")
 	case errors.Is(err, calendars.ErrEntryNotFound):

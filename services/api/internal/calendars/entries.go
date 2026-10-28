@@ -38,6 +38,10 @@ var (
 // Colors are the preset entry colors, the same as in the client's tokens.
 var Colors = []string{"fjord", "sage", "clay", "rose", "plum", "sand", "moss", "slate"}
 
+// Covers are the scenes an entry can show as its cover. The client draws
+// them, so there are no uploads.
+var Covers = []string{"lake", "mountains", "beach", "city", "night_out", "dinner", "game_night"}
+
 var (
 	ErrInvalidTitle = fmt.Errorf("entry names are 1–%d characters", MaxTitleLength)
 	ErrInvalidDate  = errors.New("dates are YYYY-MM-DD, from 2000 to 2099")
@@ -45,6 +49,7 @@ var (
 	ErrInvalidEndDate = fmt.Errorf("an entry ends on or after its first day and lasts at most %d days", MaxEntryDays)
 	ErrInvalidMonth   = errors.New("months are YYYY-MM, from 2000 to 2099")
 	ErrInvalidColor   = errors.New("unknown entry color")
+	ErrInvalidCover   = errors.New("unknown entry cover")
 	ErrInvalidReply   = errors.New("the answer must be accepted or declined")
 	// ErrEntryNotFound: no such entry in this calendar.
 	ErrEntryNotFound  = errors.New("entry not found")
@@ -82,6 +87,8 @@ type Entry struct {
 	Day    time.Time
 	EndDay time.Time
 	Color  string
+	// Cover is one of Covers, or empty for none.
+	Cover string
 	// CreatedBy is nil once the account that added it is deleted.
 	CreatedBy *Person
 	CreatedAt time.Time
@@ -153,22 +160,36 @@ func parseColor(s string) (string, error) {
 	return s, nil
 }
 
+// parseCover checks a cover; an empty one is no cover, stored as NULL.
+func parseCover(s string) (*string, error) {
+	if s == "" {
+		return nil, nil
+	}
+	if !slices.Contains(Covers, s) {
+		return nil, ErrInvalidCover
+	}
+	return &s, nil
+}
+
 // EntryInput is a new entry as the user typed it. An empty EndDate makes
-// it a single-day entry.
+// it a single-day entry, an empty Cover one without a cover.
 type EntryInput struct {
 	Title   string
 	Date    string
 	EndDate string
 	Color   string
+	Cover   string
 }
 
 // EntryChanges to an entry; nil fields stay as they are. A new Date
-// without an EndDate keeps the entry's length.
+// without an EndDate keeps the entry's length, and an empty Cover removes
+// the cover.
 type EntryChanges struct {
 	Title   *string
 	Date    *string
 	EndDate *string
 	Color   *string
+	Cover   *string
 }
 
 // ListEntries returns the entries that overlap one month (YYYY-MM).
@@ -248,6 +269,10 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 	if err != nil {
 		return Entry{}, err
 	}
+	cover, err := parseCover(in.Cover)
+	if err != nil {
+		return Entry{}, err
+	}
 	var id uuid.UUID
 	err = s.change(ctx, calendarID, userID, ActionEditEntries, func(q *store.Queries, cal store.Calendar, _ Membership) error {
 		if err := checkRoom(ctx, q, cal.ID, day, end, uuid.Nil); err != nil {
@@ -261,7 +286,7 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 			return ErrTooManyEntries
 		}
 		e, err := q.CreateEntry(ctx, store.CreateEntryParams{
-			CalendarID: cal.ID, Title: title, Day: day, EndDay: end, Color: color, CreatedBy: &userID,
+			CalendarID: cal.ID, Title: title, Day: day, EndDay: end, Color: color, Cover: cover, CreatedBy: &userID,
 		})
 		id = e.ID
 		return err
@@ -278,6 +303,7 @@ func (s *Service) CreateEntry(ctx context.Context, calendarID, userID uuid.UUID,
 func (s *Service) UpdateEntry(ctx context.Context, calendarID, userID, entryID uuid.UUID, c EntryChanges) (Entry, error) {
 	var (
 		title, color string
+		cover        *string
 		day, end     time.Time
 		err          error
 	)
@@ -301,17 +327,25 @@ func (s *Service) UpdateEntry(ctx context.Context, calendarID, userID, entryID u
 			return Entry{}, err
 		}
 	}
+	if c.Cover != nil {
+		if cover, err = parseCover(*c.Cover); err != nil {
+			return Entry{}, err
+		}
+	}
 	err = s.change(ctx, calendarID, userID, ActionEditEntries, func(q *store.Queries, cal store.Calendar, _ Membership) error {
 		e, err := getEntry(ctx, q, cal.ID, entryID)
 		if err != nil {
 			return err
 		}
-		params := store.UpdateEntryParams{ID: e.ID, CalendarID: cal.ID, Title: e.Title, Day: e.Day, EndDay: e.EndDay, Color: e.Color}
+		params := store.UpdateEntryParams{ID: e.ID, CalendarID: cal.ID, Title: e.Title, Day: e.Day, EndDay: e.EndDay, Color: e.Color, Cover: e.Cover}
 		if c.Title != nil {
 			params.Title = title
 		}
 		if c.Color != nil {
 			params.Color = color
+		}
+		if c.Cover != nil {
+			params.Cover = cover
 		}
 		if c.Date != nil {
 			params.Day = day
@@ -455,6 +489,9 @@ func entry(r store.GetEntryWithCreatorRow) Entry {
 		UpdatedAt:  r.UpdatedAt,
 		Accepted:   []uuid.UUID{},
 		Declined:   []uuid.UUID{},
+	}
+	if r.Cover != nil {
+		e.Cover = *r.Cover
 	}
 	if r.CreatedBy != nil && r.CreatorUsername != "" {
 		e.CreatedBy = &Person{ID: *r.CreatedBy, Username: r.CreatorUsername, AvatarKey: r.CreatorAvatarKey}

@@ -13,6 +13,7 @@ type entryJSON struct {
 	Date      string      `json:"date"`
 	EndDate   string      `json:"endDate"`
 	Color     string      `json:"color"`
+	Cover     *string     `json:"cover"`
 	CreatedBy *personJSON `json:"createdBy"`
 	CreatedAt string      `json:"createdAt"`
 	UpdatedAt string      `json:"updatedAt"`
@@ -142,6 +143,11 @@ func TestEntriesErrors(t *testing.T) {
 		{"POST", path + "/entries", map[string]string{"title": " ", "date": "2026-10-01", "color": "sage"}, http.StatusBadRequest, "invalid_title"},
 		{"POST", path + "/entries", map[string]string{"title": "x", "date": "01.10.2026", "color": "sage"}, http.StatusBadRequest, "invalid_date"},
 		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "color": "red"}, http.StatusBadRequest, "invalid_color"},
+		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "color": "sage", "cover": "forest"}, http.StatusBadRequest, "invalid_cover"},
+		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "color": "sage", "cover": ""}, http.StatusBadRequest, "invalid_cover"},
+		{"PATCH", entryPath, map[string]string{"cover": "forest"}, http.StatusBadRequest, "invalid_cover"},
+		{"PATCH", entryPath, map[string]string{"cover": ""}, http.StatusBadRequest, "invalid_cover"},
+		{"PATCH", entryPath, map[string]int{"cover": 1}, http.StatusBadRequest, "invalid_body"},
 		{"PATCH", entryPath, map[string]string{"date": "2100-01-01"}, http.StatusBadRequest, "invalid_date"},
 		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "endDate": "2026-09-30", "color": "sage"}, http.StatusBadRequest, "invalid_end_date"},
 		{"POST", path + "/entries", map[string]string{"title": "x", "date": "2026-10-01", "endDate": "2026-11-01", "color": "sage"}, http.StatusBadRequest, "invalid_end_date"},
@@ -208,5 +214,45 @@ func TestMultiDayEntriesAPI(t *testing.T) {
 	shorter := ada.entry("PATCH", path+"/entries/"+trip.ID, map[string]string{"endDate": "2026-11-06"}, http.StatusOK)
 	if shorter.Date != "2026-11-06" || shorter.EndDate != "2026-11-06" {
 		t.Fatalf("shortened = %+v", shorter)
+	}
+}
+
+func TestEntryCoversAPI(t *testing.T) {
+	api := newTestAPI(t)
+	ada, _ := api.signUp(t, "ada@example.com", "ada")
+	cal := ada.calendar("POST", "/calendars", map[string]string{"name": "Trip"}, http.StatusCreated)
+	path := "/calendars/" + cal.ID
+
+	// Entries without a cover return it as null.
+	resp, body := ada.do("POST", path+"/entries", map[string]string{"title": "Dinner", "date": "2026-10-01", "color": "sage"})
+	if resp.StatusCode != http.StatusCreated || !strings.Contains(string(body), `"cover":null`) {
+		t.Fatalf("no cover: %d %s", resp.StatusCode, body)
+	}
+	if e := ada.entry("POST", path+"/entries", map[string]any{
+		"title": "Pub", "date": "2026-10-02", "color": "plum", "cover": nil,
+	}, http.StatusCreated); e.Cover != nil {
+		t.Fatalf("null cover = %+v", e)
+	}
+
+	e := ada.entry("POST", path+"/entries", map[string]string{
+		"title": "Games", "date": "2026-10-03", "color": "sage", "cover": "game_night",
+	}, http.StatusCreated)
+	if e.Cover == nil || *e.Cover != "game_night" {
+		t.Fatalf("created = %+v", e)
+	}
+	entryPath := path + "/entries/" + e.ID
+
+	// Leaving cover out keeps it, a new one replaces it, null removes it.
+	if e = ada.entry("PATCH", entryPath, map[string]string{"title": "More games"}, http.StatusOK); e.Cover == nil || *e.Cover != "game_night" {
+		t.Fatalf("after renaming = %+v", e)
+	}
+	if e = ada.entry("PATCH", entryPath, map[string]string{"cover": "night_out"}, http.StatusOK); e.Cover == nil || *e.Cover != "night_out" {
+		t.Fatalf("after new cover = %+v", e)
+	}
+	if got := ada.entry("GET", entryPath, nil, http.StatusOK); got.Cover == nil || *got.Cover != "night_out" {
+		t.Fatalf("get = %+v", got)
+	}
+	if e = ada.entry("PATCH", entryPath, map[string]any{"cover": nil}, http.StatusOK); e.Cover != nil {
+		t.Fatalf("after removing = %+v", e)
 	}
 }
